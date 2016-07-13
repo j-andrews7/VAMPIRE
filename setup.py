@@ -9,7 +9,7 @@ setup(
     name='driven',
     version='0.1.0',
     url='https://github.com/j-andrews7/DRIVEN',
-    license='BSD',
+    license='MIT',
     author='Jared Andrews',
     author_email='jared.andrews07@gmail.com',
     description='Driven is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions.',
@@ -35,7 +35,7 @@ setup(
         # 'Development Status :: 7 - Inactive',
         'Environment :: Console',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: BSD License',
+        'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX',
         'Operating System :: MacOS',
         'Operating System :: Unix',
@@ -44,5 +44,6 @@ setup(
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
         'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
     ]
 )
