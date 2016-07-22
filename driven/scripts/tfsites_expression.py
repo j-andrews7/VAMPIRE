@@ -4,6 +4,8 @@
 import sys
 import argparse
 parser = argparse.ArgumentParser(usage=__doc__)
+from math import ceil
+from math import log10
 
 ####-CLASSES-####
 # Not strictly necessary, but may be useful if other options are added
@@ -99,7 +101,7 @@ def get_genes( opened_file, cell_line, threshold ):
         exp_level = float(line_list[cell_line_idx])
         if exp_level >= threshold:
             #Add gene names and expression values to respective lists
-            gene_names.append(gene_name)
+            gene_names.append(std_gene_name(gene_name))
             exp_values.append(exp_level)
         
     return dict(zip(gene_names, exp_values))
@@ -122,7 +124,7 @@ def update_vcf(line_tup, output_f, options):
     Returns: Nothing (updates output_f instead of returning)
     """
     
-    (motifns, motifvs, motifrs, motifcs, oth_info, line) = line_tup
+    (motifns, motifvs, motifrs, motifcs, motifes, oth_info, line) = line_tup
     
     #First 8 columns should always be:
     #CHROM  POS ID  REF ALT QUAL    FILTER  INFO
@@ -137,6 +139,7 @@ def update_vcf(line_tup, output_f, options):
     varscores = ""
     refscores = ""
     chips = ""
+    explevels = ""
    
     
     for idx in range(len(motifns)):
@@ -145,9 +148,11 @@ def update_vcf(line_tup, output_f, options):
             varscores += ","
             refscores += ","
             chips += ","
+            explevels += ","
         names += motifns[idx]
         varscores += motifvs[idx]
         refscores += motifrs[idx]
+        explevels += sf_str(motifes[idx],4)
         if len(motifcs) != 0:
             chips += motifcs[idx]
     
@@ -164,7 +169,8 @@ def update_vcf(line_tup, output_f, options):
             outline += "\t"
         if idx == 7:
             if len(motifns) != 0:
-                outline += "MOTIFN="+names+";MOTIFV="+varscores+";MOTIFR="+refscores
+                outline += "MOTIFN="+names+";MOTIFV="+varscores
+                outline += ";MOTIFR="+refscores+";MOTIFE="+explevels
                 if len(motifcs) != 0:
                     outline += ";MOTIFC="+chips
                 for field in oth_info:
@@ -184,7 +190,29 @@ def update_vcf(line_tup, output_f, options):
     
     return
 
-   
+def sf_str( x, n ):
+    """ Rounds x to a certain number of significant figures.
+        Returns the output as a string
+        Ex:
+        round(0.01234567, 3) -> 0.0123
+        round(234.5678, 4) -> 234.6
+        round(1234.56, 2) -> 1200 
+        
+    Args:
+        x = float to be rounded
+        n = number of sig figs
+    
+    Returns: a string """
+    return str(round(x, int(n-ceil(log10(abs(x)))))) 
+
+def std_gene_name(gene_name):
+    """
+    Returns standard format for gene name
+        This function can be updated later to convert between standard names
+    """
+    return gene_name.upper()
+
+
 ####-PARSER-####  
 # Create arguments and options
 parser.add_argument("-i", "--input", dest = "input_file", required=True)
@@ -227,8 +255,8 @@ with open(inp_file) as vcf:
     line = vcf.readline()
     
     info_needed = True
-    info = "##INFO=<ID=MOTIFN,Number=.,Type=String,Description="
-    info += "\"Matched motif names\">\n"
+    info = "##INFO=<ID=MOTIFE,Number=.,Type=Float,Description="
+    info += "\"Motif expression level\">"
     
     # Skip info lines
     while line.startswith("##"):
@@ -240,7 +268,7 @@ with open(inp_file) as vcf:
         line = vcf.readline()
     
     # First non-## line is a header
-    print(line, file=output_f)
+    print(line, file=output_f, end="")
     
     current_var = get_next_var( vcf )
     
@@ -253,13 +281,20 @@ with open(inp_file) as vcf:
         f_motifvs = []
         f_motifrs = []
         f_motifcs = []
+        # Expression level of motifs
+        f_motifes = []
         
         for idx in range(len(motifns)):
             motif_name = motifns[idx]
             #Genes are only in the dictionary if their expression is above
             # the given threshold. Add them to the filtered lists if they are
             # expressed.
-            if motif_name in gene_dict:
+            #Standard gene name used (works if cases are different for now)
+            std_name = std_gene_name(motif_name)
+            if std_name in gene_dict:
+                # Add expression level
+                f_motifes.append(gene_dict[std_name])
+                # Add name and other data
                 f_motifns.append(motifns[idx])
                 f_motifvs.append(motifvs[idx])
                 f_motifrs.append(motifrs[idx])
@@ -267,7 +302,7 @@ with open(inp_file) as vcf:
                     f_motifcs.append(motifcs[idx])
                     
         # Output filtered motifs
-        tup = (f_motifns, f_motifvs, f_motifrs, f_motifcs, oi, line)
+        tup = (f_motifns, f_motifvs, f_motifrs, f_motifcs, f_motifes, oi, line)
         update_vcf(tup, output_f, options)
         
         current_var = get_next_var( vcf )
