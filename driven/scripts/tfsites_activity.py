@@ -374,6 +374,9 @@ vcfs = [None for idx in range(len(headers)-4)]
 #Currently unused
 not_found = []
 
+print("Opening vcfs.")
+sys.stdout.flush()
+
 #This loop initializes vcfs.
 # First four entries are CHROM START END ID
 # After that should be samples of the form SAMPLE_OTHERINFO

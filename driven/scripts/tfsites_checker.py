@@ -22,6 +22,8 @@ Args:
   -th (optional) <0> = Motifs are considered a match if they score above a
     given threshold. This is the default threshold (used if no threshold is
     specified by motif file). Default value is 0 (may be a float or int).
+  -ws (optional) <50> = Optional wing size to search for weak homotypic
+    matches, co-binding tfs, and GC content. Default value is 100 (int).
   -bp (optional) <baselines.txt> = A file containing a single line with tab
     delineated values for baseline probabilities for A, C, G, T (in order).
     Probabilities should all be positive and should sum to 1. If none is
@@ -36,10 +38,10 @@ Args:
   -co (optional) <chip_out.bed> = Name of output bed file to be created.
     A new column will be added with motifs that computationally match each
     peak.
-  -fp (optional flag) = If -fk (filter with peaks) is included, ChIP peaks
+  -fp (optional flag) = If -fp (filter with peaks) is included, ChIP peaks
     that do not match any motif will not be included in the output (-co).
   -sk (optional flag) = If -sk (sorted by karyotype) is included, then the
-    program knows that 
+    program knows that
 """
 
 import sys
@@ -71,6 +73,31 @@ class Options_list:
         # -sk sets this to True
         self.sorted_lex = False
 
+class Motif_match:
+    def __init__(self, name, var_score, ref_score):
+        #The transcription factor (tf) name
+        self.name = name
+        
+        #tf motif match information (variant and reference sequence max log
+        # likelihood score for the tf)
+        self.var_score = var_score
+        self.ref_score = ref_score
+        
+        #Does the motif match fall inside a chip peak for the same tf
+        self.chip_match = False
+        
+        #Sequence environment data
+        # variant and reference gc content
+        self.var_gc = None
+        self.ref_gc = None
+        # variant and reference homotypic matches
+        self.var_ht = []
+        self.ref_ht = []
+        # co-binding motifs (currently not implemented)
+        self.cobinders = []
+        
+    
+        
 ####-Functions-####
 def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     """ Return sequence containing variant base + specified number
@@ -238,7 +265,7 @@ def get_motifs(motif_f, pc, default_th, base_pr):
                 
             #Order of position weight matrices is A,C,G,T. Remove brackets etc.
             elif i < 5:       
-                matrix[i-1] = line
+                matrix[i-1] = line[1:]
                 if len(matrix[i-1]) > max_length:
                     max_length = len(matrix[i-1])
                 
@@ -299,11 +326,7 @@ def match_motifs(motifs,b_prob,ref_seq,var_seq,wing_l):
         var_seq = Variant sequence represented as a string (ACGT only)
         wing_l = Integer length of sequence of bases flanking the variant
         
-    Returns: A list of tuples of the form:
-        (motif id, motif variant score, motif reference score, ChIP match)
-            Where: motif id is a string 
-            motif score is a float
-            ChIP match is a boolean (False here until matched later)
+    Returns: A list of Motif_match objects
     """
     
     #motif match array with the form (id, name, p_matrix, max_score, match_seq)
@@ -322,8 +345,8 @@ def match_motifs(motifs,b_prob,ref_seq,var_seq,wing_l):
                 print("***ERROR*** matching motifs to varseq and refseq desynced\n"+
                     id +" != "+rid+" or "+name+" != "+rname+" or "+th+" != "+rth)
             #tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
-            tup = (name, max_score, rmax_score, False)
-            matches.append(tup)
+            match = Motif_match(name, max_score, rmax_score)
+            matches.append(match)
     
     #output variant seq matches vs ref seq matches
     """for m in matches:
@@ -341,7 +364,7 @@ def score_motifs(motifs, baseline_p, sequence, wing_l):
     that no motif have a length of 0. 
     
     Args:
-        motifs = Motif sequences with names as a list of (id, name, weight matrix)
+        motifs = Motif sequences with names as a list of (id, name, th, weight matrix)
             triples (tuples) from the motif (.txt) file. Also returns maximum length
             motif.
         baseline_p = sequence of baseline probabilities of each base, in order (A, C,
@@ -350,13 +373,13 @@ def score_motifs(motifs, baseline_p, sequence, wing_l):
         wing_l = length of sequence of bases flanking the variant
     
     Returns:
-        matches = array of matches between motifs and sequences of the form
-            (id, name, thresh, max_score, match_seq)
+        matches = array of scores of the form:
+            ( id,  name,  threshold,  max_score,  match_seq)
     
     Concern: Longer motifs matches will generate higher scores
     """
     #list of matches between motifs and sequence
-    matches = []
+    scores = []
     #print("Running match motifs!")
     
     for tuple in motifs:
@@ -395,10 +418,10 @@ def score_motifs(motifs, baseline_p, sequence, wing_l):
         
         #debug print("Max match score:"+str(max_score)+" for motif "+name+" and sequence "+match_seq+".")
         tup = (id, name, thresh, max_score, match_seq)
-        matches.append(tup)
+        scores.append(tup)
         
         
-    return matches
+    return scores
         
 def score_motif(p_matrix, baseline_p, sequence):
     """
@@ -416,8 +439,6 @@ def score_motif(p_matrix, baseline_p, sequence):
     
     Returns:
         Match score between probability matrix and sequence
-    
-    Concern: Longer motifs matches will generate higher scores
     """
     
     score = 0
@@ -476,6 +497,90 @@ def score_base(probability, baseline_p):
     else:
         return log2(probability / baseline_p)
 
+
+def process_local_env(motifs,baseline_p,matches,co_binders_dict,v_seq,r_seq,wing_l):
+    """
+    Finds GC content, weak homotypic matches, and motif matches for co-binding
+        transcription factors. Co-binding tf currently not implemented.
+
+    Args:
+        motifs = Motif sequences with names as a tuple list of the form:
+            (id, name, threshold, weight matrix)
+        baseline_p = sequence of baseline probabilities of each base, in order (A, C,
+            G, T). Probabilities should sum to 1.
+        matches = list of Motif_match objects
+        co_binders = dictionary that lists co-binding transcription factors for
+            a given transcription factor name
+        v_seq = variant sequence array of characters (strings 'A','C','G', or 'T')
+        r_seq = reference sequence array of characters (strings 'A','C','G', or 'T')
+    
+    Returns: Updates matches
+    """
+    
+    #Get GC content
+    gc = v_seq.count('G')+v_seq.count('g')
+    gc += v_seq.count('C')+v_seq.count('c')
+    var_gc = gc / len(v_seq)
+    
+    gc = r_seq.count('G')+r_seq.count('g')
+    gc += r_seq.count('C')+r_seq.count('c')
+    ref_gc = gc / len(r_seq)    
+    
+    #Get list of motifs that matched
+    id_list = []
+    matched_motifs = []
+    for match in matches:
+        match_motif = None
+        #Find the matched motif's info
+        for motif in motifs:
+            #Motif name is motif[1]
+            if match.name == motif[1]:
+                match_motif = motif
+                break
+        #This should not happen as both come from same motifs list
+        if match_motif == None:
+            print("**Error** process_local_environment unable to find motif")
+            print("\tName: "+str(id))
+            
+        
+        (mot_id, mot_n, mot_th, pwm) = match_motif
+        #Find homotypic variant and reference matches
+        vh_matches = []
+        rh_matches = []
+        
+        #Check each wing seperately,
+        # homotypic matches should not overlap the variant
+        left_wing = v_seq[:wing_l]
+        right_wing = v_seq[-wing_l:]
+        vh_matches = ht_matches_in(pwm, mot_th, baseline_p, left_wing)
+        vh_matches += ht_matches_in(pwm, mot_th, baseline_p, right_wing)
+
+        left_wing = r_seq[:wing_l]
+        right_wing = r_seq[-wing_l:]        
+        vh_matches = ht_matches_in(pwm, mot_th, baseline_p, left_wing)
+        vh_matches += ht_matches_in(pwm, mot_th, baseline_p, right_wing)
+        
+        #Update the match information
+        match.var_ht = vh_matches
+        match.var_gc = var_gc
+        match.ref_ht = rh_matches
+        match.ref_gc = ref_gc
+    
+    #Finding co-binders currently not implemented
+    
+    return
+
+def ht_matches_in(pos_wt_matrix, threshold, baseline_pr, sequence):
+    #Returns homotypic matches (scores above threshold) in the given sequence
+    homotypic_matches = []
+    for pos in range(len(sequence) - len(pos_wt_matrix[0]) + 1):
+        #debug print("\tLooking at <"+v_seq[pos:pos+len(pwm[0])]+">")
+        pos_score = score_motif(pos_wt_matrix, baseline_pr, sequence[pos:])
+        #Return the homotypic match if it is above the threshold
+        if pos_score > threshold:
+            homotypic_matches.append(pos_score)
+    return homotypic_matches
+    
         
 def get_next_var(opened_file):
     """
@@ -517,8 +622,7 @@ def update_vcf(line, matches, output_f, options):
     
     Args:
         line = original vcf line (input file line)
-        matches = list of motif matches as tuples of the form:
-            (id, variant score, reference score, ChIP match)
+        matches = list of Motif_match objects
         output_f = output vcf
         options = options list
     
@@ -538,6 +642,10 @@ def update_vcf(line, matches, output_f, options):
     varscores = ""
     refscores = ""
     chips = ""
+    varht = ""
+    refht = ""
+    vargc = ""
+    refgc = ""
     
     
     for match in matches:
@@ -546,10 +654,22 @@ def update_vcf(line, matches, output_f, options):
             varscores += ","
             refscores += ","
             chips += ","
-        names += match[0]
-        varscores += sf_str(match[1],3)
-        refscores += sf_str(match[2],3)
-        if match[3]:
+        if vargc != "":    
+            varht += ","
+            refht += ","
+            vargc += ","
+            refgc += ","
+        names += match.name
+        varscores += sf_str(match.var_score,3)
+        refscores += sf_str(match.ref_score,3)
+        #Sequence environment data
+        if match.var_gc != None:
+            ht_matches = ""
+            varht += sublist_str(match.var_ht,3)
+            refht += sublist_str(match.ref_ht,3)
+            vargc += sf_str(match.var_gc,3)
+            refgc += sf_str(match.ref_gc,3)
+        if match.chip_match:
             chips += "Y"
         else:
             chips += "N"
@@ -569,6 +689,9 @@ def update_vcf(line, matches, output_f, options):
             outline += "\t"
         if idx == 7:
             outline += "MOTIFN="+names+";MOTIFV="+varscores+";MOTIFR="+refscores
+            if refgc != "":
+                outline += ";MOTIFVH="+varht+";MOTIFRH="+refht
+                outline += ";MOTIFVG="+vargc+";MOTIFRG="+refgc
             if (options.chip_present):
                 outline += ";MOTIFC="+chips
             if col != '.':
@@ -588,6 +711,18 @@ def update_vcf(line, matches, output_f, options):
     print (outline, file=output_f)
     
     return
+
+def sublist_str(sublist, sig_figs):
+    #Converts a float list within an info field list into a string
+    output = ""
+    for float_item in sublist:
+        if output != "":
+            output += "/"
+        #debug output += str(float_item)
+        output += sf_str(float_item, sig_figs)
+    if output != "":
+        return "("+output+")"
+    return ""
 
     
 def match_peaks(chr, pos, peaks, chip_f, matches, output_f, options):
@@ -667,14 +802,14 @@ def match_peaks(chr, pos, peaks, chip_f, matches, output_f, options):
             if pend >= pos:
                 motif_idx = 0
                 for motif_idx in range(len(matches)):
-                    (m_name, mv, mr, m_chip) = matches[motif_idx]
+                    match = matches[motif_idx]
                     pmms.append(matches[motif_idx])
                     for trans_factor in ptfs:
                         #If the transcription factor (chip peak) name is the same as
                         # the matched motif name, note that there is a chip match
-                        if trans_factor == m_name:
+                        if trans_factor == match.name:
                             #Motif match is verified by ChIP data
-                            matches[motif_idx] = (m_name, mv, mr, True)
+                            matches[motif_idx].chip_match = True
                 #Save with new value for pmms
                 peaks[idx] = (pchr, psta, pend, ptfs, pmms)
             #Otherwise both are before pos, so remove that peak and continue
@@ -812,8 +947,8 @@ def print_peak( peak, file, options ):
     for match in mm_array:
         if motif_string != "":
             motif_string += ";"
-        (name, vscore, rscore, chip) = match
-        motif_string += name+","+sf_str(vscore,3)+","+sf_str(rscore,3)
+        motif_string += match.name+","+sf_str(match.var_score,3)+","
+        motif_string += sf_str(match.ref_score,3)
     
     line += chip_string + "\t" + motif_string
     print(line, file=file)
@@ -863,7 +998,7 @@ def chr_less( chr_left, chr_right, options):
             except ValueError:
                 return chr_left < chr_right
                 
-                
+
     
 ####-PARSER-####
 
@@ -885,6 +1020,8 @@ parser.add_argument("-th", "--threshold", dest = "threshold",
     required = False, default = None)
 parser.add_argument("-pc", "--pseudocounts", dest = "pseudocounts",
     required = False, default = 0.1)
+parser.add_argument("-ws", "--wing_size", dest = "wing_size",
+    required = False, default = 50)
 parser.add_argument("-fm", "--filter_o", action="count", required = False)
 parser.add_argument("-fp", "--filter_co", action="count", required = False)
 parser.add_argument("-sk", "--kary_sort", action="count", required = False)
@@ -900,6 +1037,7 @@ bp_file = args.baseline_file
 chip_file = args.chip_file
 chip_out_file = args.chip_out_file
 pc = float(args.pseudocounts)
+ws = int(args.wing_size)
 
 #Options list. Easier to pass in methods or use in code updates.
 options = Options_list()
@@ -963,12 +1101,13 @@ sys.stdout.flush()
 print("Creating motif list from " + motif_file)
 sys.stdout.flush()
 (motifs, max_motif_l) = get_motifs(motif_file, pc, th, bp)
-print("Maximum motif length is "+str(max_motif_l)+".")
+#debug print("Maximum motif length is "+str(max_motif_l)+".")
 
 
-#Wing length should be one less than the length of the maximum motif so
-#motif is only matched against places with overlap with the variant
-wing_l = max_motif_l - 1
+#Wing length for individual variants is calculated dynamically so that it is
+# always one less than the length of the maximum motif so motif is only matched
+# against places with overlap with the variant
+wing_l = max(max_motif_l - 1, ws)
 
 # Open output file.
 output_f = open(out_file,"w")
@@ -1144,6 +1283,8 @@ with open(inp_file) as vcf:
         
         #Calculate motif matches to variant sequence
         plusmatch = match_motifs(motifs,bp,ref_seq,var_seq,wing_l)
+        #Add local environment data
+        process_local_env(motifs,bp,plusmatch,None,var_seq,ref_seq,wing_l)
         
         #Also output matches to reverse complement
         r_refseq = get_reverse_complement(ref_seq)
@@ -1151,6 +1292,8 @@ with open(inp_file) as vcf:
         
         #Calculate motif matches to reverse complement
         minusmatch = match_motifs(motifs,bp,r_refseq,r_varseq,wing_l)
+        #Add local environment data
+        process_local_env(motifs,bp,minusmatch,None,r_varseq,r_refseq,wing_l)
         
         matches = plusmatch + minusmatch
         
@@ -1169,6 +1312,9 @@ with open(inp_file) as vcf:
                 " mms:"+str(len(pmms)))
         print()"""
         
+        #Co-binding transcription factors currently not implemented
+        cb_dict = None
+         
         #Create the correct line in VCF format and print to output_f
         update_vcf(line, matches, output_f, options)
         
