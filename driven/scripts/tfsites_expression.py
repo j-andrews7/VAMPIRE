@@ -16,13 +16,19 @@ Args:
 
   -sn (optional) <sample_name> = name of the sample (the name must be present
         in expression.bed)
-  -th (optional) <0> = Motifs are considered a match if they score above a
-    given threshold. This is the default threshold (used if no threshold is
-    specified by motif file). Default value is 0 (may be a float or int).
+  -th (optional) <5> = Motifs are expressed a match if they are expressed above
+    a given threshold. Default value is 5 (may be a float or int).
   -fe (optional flag) = If -fe (filter by expression) is included, variants
     that do not match any motif for an expressed protein will not be included
     in the output (-o) file.
 """
+
+#Note: currently this code expects an expression text file of the form:
+# GENE_NAME <Sample names delineated by tabs>
+#To change where gene name is expected, go to line 128
+# gene_name = line_list[0]
+# where [0] works for the above configuration and [3] works for a 'bed' file
+# 'bed' file: chr	START	END	GENE_SYMB	<Sample names delineated by tabs>
 
 import sys
 import argparse
@@ -126,7 +132,7 @@ def get_genes( opened_file, cell_line, threshold ):
     for line in opened_file:  
         line_list = line.strip().split('\t')
         #Only add the gene to the list if its expression is above the threshold
-        gene_name = line_list[3]
+        gene_name = line_list[0]
         exp_level = float(line_list[cell_line_idx])
         if exp_level >= threshold:
             #Add gene names and expression values to respective lists
