@@ -60,7 +60,16 @@ class Options_list:
         #Should lines in the vcf output file be excluded 
         # if they don't match a motif?
         # -fm tag sets this to True
-        self.filter_vcf = False
+        self.filter_vcf_mm = False
+        #Should lines in the vcf output file be excluded 
+        # if they don't match a ChIP peak?
+        # -fc tag sets this to True        
+        self.filter_vcf_chip = False
+        #Should lines in the vcf output file be excluded 
+        # if they do match a ChIP peak? Allows for printing of only
+        # potentially novel variants
+        # -fn tag sets this to True
+        self.filter_vcf_no = False
         #Should lines in the chip (bed) output file be excluded
         # if they don't match a motif?
         # -fp sets this to True
@@ -647,8 +656,16 @@ def update_vcf(line, matches, output_f, options):
     vargc = ""
     refgc = ""
     
+    to_be_printed = 0
     
     for match in matches:
+        #First, check if the match needs to be filtered
+        if options.filter_vcf_chip and not match.chip_match:
+            continue
+        elif options.filter_vcf_no and match.chip_match:
+            continue
+        else:
+            to_be_printed += 1
         if chips != "":
             names += ","
             varscores += ","
@@ -676,8 +693,9 @@ def update_vcf(line, matches, output_f, options):
     
     #If there are no matches, print the line unchanged or filter it out (return
     #without printing)
-    if len(matches) == 0:
-        if options.filter_vcf == False:
+    if to_be_printed == 0:
+        if (not options.filter_vcf_mm and not options.filter_vcf_chip and
+            not options.filter_vcf_no):
             print(line, file=output_f)
         return
     
@@ -1023,6 +1041,8 @@ parser.add_argument("-pc", "--pseudocounts", dest = "pseudocounts",
 parser.add_argument("-ws", "--wing_size", dest = "wing_size",
     required = False, default = 50)
 parser.add_argument("-fm", "--filter_o", action="count", required = False)
+parser.add_argument("-fc","--filter_chip",action="count",required = False)
+parser.add_argument("-fn","--filter_novel",action="count",required = False)
 parser.add_argument("-fp", "--filter_co", action="count", required = False)
 parser.add_argument("-sk", "--kary_sort", action="count", required = False)
 
@@ -1041,8 +1061,8 @@ ws = int(args.wing_size)
 
 #Options list. Easier to pass in methods or use in code updates.
 options = Options_list()
-options.filter_vcf = (args.filter_o != None)
-options.filter_bed = (args.filter_co != None)
+options.filter_vcf_mm = (args.filter_o != None)
+
 options.sorted_lex = (args.kary_sort == None)
 
 #Output so user can double check options
@@ -1068,20 +1088,36 @@ coutput_f = None
 
 if (chip_file != None):
     options.chip_present = True
+    
+    #Process chip related options
+    options.filter_bed = (args.filter_co != None)
+    options.filter_vcf_chip = (args.filter_chip != None)
+    options.filter_vcf_no = (args.filter_novel != None)
+    
     opt_args += "    ChIP file: "+chip_file+"\n"
     chip_f = open(chip_file)
     if (chip_out_file != None):
         opt_args += "    ChIP output file: "+chip_out_file+"\n"
         coutput_f = open(chip_out_file,"w")
+        if (options.filter_bed):
+            opt_args += "    Filter output ChIP bed for motif matches? Yes\n"
+        if (options.filter_vcf_chip):
+            opt_args += "    Filter output vcf for ChIP peak overlap? Yes\n"
+        if (options.filter_vcf_no):
+            opt_args += "    Filter output vcf for no ChIP peak overlap? Yes\n"
+        if (options.filter_vcf_chip and options.filter_vcf_no):
+            opt_args += "Err: Cannot have -fn and -fc (two prev options)."
+            opt_args += "    Both will be ignored.\n"
+            options.filter_vcf_chip = False
+            options.filter_vcf_no = False
 elif (chip_out_file != None):
     opt_args += "No ChIP file given, so no ChIP output file will be created\n"
 
 if (bp_file != None):
     opt_args += "    Baseline probabilities file: "+bp_file+"\n"
-if (options.filter_vcf):
+if (options.filter_vcf_mm):
     opt_args += "    Filter output vcf for motif matches? Yes\n"
-if (options.filter_bed):
-    opt_args += "    Filter output ChIP bed for motif matches? Yes\n"
+
 if (not options.sorted_lex):
     opt_args += "    Input vcf and Input ChIP bed are sorted by karyotype\n"
 
