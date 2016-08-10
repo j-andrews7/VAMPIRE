@@ -1177,13 +1177,23 @@ with open(inp_file) as vcf:
     
     info_needed = True
     info = "##INFO=<ID=MOTIFN,Number=.,Type=String,Description="
-    info += "\"Matched motif names\">\n"
-    info += "##INFO=<ID=MOTIFV,Number=.,Type=Float,Description="
-    info += "\"Variant match scores\">\n"
-    info += "##INFO=<ID=MOTIFR,Number=.,Type=Float,Description="
-    info += "\"Reference match scores\">\n"
+    info += "\"Matched motif names\">"
+    info += "\n##INFO=<ID=MOTIFV,Number=.,Type=Float,Description="
+    info += "\"Variant match scores\">"
+    info += "\n##INFO=<ID=MOTIFR,Number=.,Type=Float,Description="
+    info += "\"Reference match scores\">"
+    
+    info += "\n##INFO=<ID=MOTIFVH,Number=.,Type=String,Description="
+    info += "\"Variant homotypic match scores\">"
+    info += "\n##INFO=<ID=MOTIFRH,Number=.,Type=String,Description="
+    info += "\"Reference homotypic match scores\">"
+    info += "\n##INFO=<ID=MOTIFVG,Number=.,Type=String,Description="
+    info += "\"Variant environment GC content\">"
+    info += "\n##INFO=<ID=MOTIFRG,Number=.,Type=String,Description="
+    info += "\"Reference environment GC content\">"
+
     if (chip_f != None):
-        info += "##INFO=<ID=MOTIFC,Number=.,Type=Character,Description="
+        info += "\n##INFO=<ID=MOTIFC,Number=.,Type=Character,Description="
         info += "\"Motif validated by ChIP (Y/N)\">"
     
     #Skip info lines
