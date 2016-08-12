@@ -265,6 +265,11 @@ class Options_list:
         # -fa sets this to True
         self.filter_bed = False
         
+        #Only print activity if it affects more samples than this number
+        # default is -1 so a region with any number of samples affected
+        # (having z-scores above threshold) will be output.
+        self.filter_bed_num = 0
+        
 ####-METHODS-####
 
 def get_next_activity(open_activity_file):
@@ -291,17 +296,38 @@ def get_next_activity(open_activity_file):
         
     return (pos, id, samples_act)
 
-def output_activity(open_file, enh_pos, enh_id, matches, options):
+def output_activity(open_file, enh_pos, enh_id, matches, ref_l,var_l, options):
     
     #If filtering and there are no matches, print nothing
     if options.filter_bed and len(matches) == 0:
         return
     
+    #This is set to 0 by default, so everything will be output
+    if len(matches) < options.filter_bed_num:
+        return
+    
     line=enh_pos.chr+'\t'+str(enh_pos.start)+'\t'+str(enh_pos.end)+'\t'+enh_id
+    #print number of samples affected
+    if len(matches) > 0:
+        line+="\tsig_diff="+str(len(matches))+",have_var="+str(var_l)
+        line+=",ref_group="+str(ref_l)
+    else:
+        line+="\t."
     
     for match in matches:
-        (name, pos, zscore) = match
-        line += '\t'+name+","+str(pos)+","+sf_str(zscore,3)
+        (name, pos, zscore, orig_line) = match
+        
+        #info line is 7th column
+        line_list = orig_line.split("\t")
+        if len(line_list) > 7:
+            out_str = ""
+            for field in line_list[7].split(';'):
+                if field.startswith("MOTIF"):
+                    out_str += field + ";"
+            #Cut off last ';'
+            out_str = out_str[:-1]
+        
+        line += '\tsample='+name+",var="+str(pos)+",z="+sf_str(zscore,3)+"--"+out_str
         
     print(line, file=open_file)
 
@@ -328,12 +354,15 @@ parser.add_argument("-o", "--output", dest = "output_file", required=True)
 parser.add_argument("-v", "--vcf", dest = "vcf_dir", required=True)
 parser.add_argument("-th", "--threshold", dest = "threshold", 
     required = False, default = 0)
+parser.add_argument("-fan", "--filter_a_n", dest = "filter_a_n", 
+    required = False, default = 0)
 parser.add_argument("-vo", "--vcfout", dest = "vcf_out_dir",
     required=False, default = None)
 parser.add_argument("-eo", "--errout", dest = "err_out",
     required=False, default = None)
 parser.add_argument("-fa", "--filter_a", action="count", required = False)
 parser.add_argument("-fv", "--filter_vcfs", action="count", required = False)
+
 
 args = parser.parse_args()
 
@@ -345,9 +374,9 @@ vcf_dir = args.vcf_dir
 th = float(args.threshold)
 
 options = Options_list()
+options.filter_bed_num = int(args.filter_a_n)
 options.filter_bed = (args.filter_a != None)
 options.filter_vcf = (args.filter_vcfs != None)
-
 
 ####-MAIN-####
 
@@ -358,7 +387,7 @@ if err_file != None:
     err_f = open(err_file, "w")
     print("CHROM\tSTART\tEND\tID\tREFERENCE_ACT\tVARIANTS",file=err_f)
 
-print("CHROM\tSTART\tEND\tID\tVARIANTS",file=out_f)
+print("CHROM\tSTART\tEND\tID\tSAMPLES_INFO\tVARIANTS",file=out_f)
 
 #Make the vcf output directory if it does not exist
 vcf_out_dir_path = None
@@ -441,6 +470,7 @@ while flag < 2 and enh_pos != None:
     ## Need to decide what info should be output
     scored_vcfs = []
     
+    #Find first variant to process (first_pos / first_idx)
     for idx in range(len(vcfs)):
         vcf = vcfs[idx]
         #debug print("\tChecking vcf "+str(vcf))
@@ -494,16 +524,19 @@ while flag < 2 and enh_pos != None:
             #debug print("Std = "+str(ref_std))
             #debug print("Mean = "+str(ref_avg))
         
+        #Calculate z-scores
         if ref_std != 0:
             for idx in var_samples_idx:
                 #debug print("Activity = "+str(enh_act[idx]))
                 zscore = ( enh_act[idx] - ref_avg ) / ref_std
                 #Matches should have name, Position object, and zscore
+                #Matches to be output to .bed file will have (name, pos, zscore, original line)
                 if (abs(zscore) > th):
-                    matches.append((str(vcfs[idx]) ,vcfs[idx].var_pos ,zscore))
+                    matches.append((str(vcfs[idx]) ,vcfs[idx].var_pos ,zscore, vcfs[idx].original_line))
                     vcfs[idx].matches.append((enh_id, enh_pos, zscore))
                 #debug print("Z-score for enhancer "+enh_id+" - "+str(enh_pos)+
                 #    " and sample "+str(vcfs[idx])+" = "+str(zscore))
+        #Print any errors to error file
         elif err_f != None:
             #Z-score not calculated (insufficient samples or 0 variance)
             err_line = enh_pos.chr+'\t'+str(enh_pos.start)+'\t'
@@ -547,10 +580,16 @@ while flag < 2 and enh_pos != None:
             #debug print("Incrementing "+str(vcfs[idx]))
             vcfs[idx].next_variant(options)
 
-        
+        #Print overlapping variants on same line, remove block to print all variants
+        # from same enhancer peak together
+        ref_l = len( ref_samples_act )
+        var_l = len( var_samples_idx )
+        output_activity(out_f, enh_pos, enh_id, matches, ref_l, var_l, options)
+        matches = []
+    
     #If no overlapping variant was found, go to next enhancer peak
     else:
-        output_activity(out_f, enh_pos, enh_id, matches, options)
+        output_activity(out_f, enh_pos, enh_id, matches, 0, 0, options)
         prev_chr = enh_pos.chr
         #debug if len(matches) > 0:
         #    flag += 1
