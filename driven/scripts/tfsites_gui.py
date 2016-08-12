@@ -30,7 +30,29 @@ class Tfsites_checker_options():
         return (self.r == None or self.i == None or self.m == None or
             self.o == None)
         
+class Tfsites_expression_options():
+    def __init__(self):
+        self.i = None
+        self.o = None
+        self.e = None
+        # -c (required) <sample_name> = name of sample
+        #   sample name must be present in expression.bed
+        
+        #Optional arguments
+        self.ci = None
+        #not implemented self.co = None
+        self.bp = None
+        
+        # filter arguments
+        self.fm = True
+        self.fc = False
+        self.fn = False
+        
+    def missing_args(self):
+        return (self.i == None or self.e == None or
+            self.o == None)
 
+        
 def choose_o_dir():
     dirname = askdirectory(title="Select output VCF location")
     checker_op.o = dirname
@@ -53,31 +75,7 @@ def choose_r():
     checker_op.r = filename
     checker_r.set("Reference sequence file: "+final_fn(filename))
 
-def choose_ci(strVar):
-    filename = askopenfilename(title="Select ChIP input file",
-        filetypes=[('Merged TF ChIP peaks', '.bed'),('All file types', '.*')])
-    checker_op.ci = filename
-    strVar.set("Transcription Factor ChIP peaks (Merged .bed file:\n"+
-        final_fn(filename))   
-
-def choose_bp(strVar):
-    filename = askopenfilename(
-        title="Select baseline nucleotide frequency file",
-        filetypes=[('Text file', '.txt'),('All file types', '.*')])
-    checker_op.bp = filename
-    strVar.set("Baseline nucleotide probabilities file:\n"+
-        final_fn(filename))
-        
-def final_fn(filename):
-    if filename == None:
-        return "None"
-    output = filename.replace('\\','/').split('/')[-1]
-    if output == "":
-        return "None"
-    return output
-
-
-    
+# tfsites_checker optional arguments window    
 def optional_window():
     master.withdraw()
     
@@ -154,6 +152,28 @@ def optional_window():
     
     root.focus_force()
     
+def choose_ci(strVar):
+    filename = askopenfilename(title="Select ChIP input file",
+        filetypes=[('Merged TF ChIP peaks', '.bed'),('All file types', '.*')])
+    checker_op.ci = filename
+    strVar.set("Transcription Factor ChIP peaks (Merged .bed file:\n"+
+        final_fn(filename))   
+
+def choose_bp(strVar):
+    filename = askopenfilename(
+        title="Select baseline nucleotide frequency file",
+        filetypes=[('Text file', '.txt'),('All file types', '.*')])
+    checker_op.bp = filename
+    strVar.set("Baseline nucleotide probabilities file:\n"+
+        final_fn(filename))
+        
+def final_fn(filename):
+    if filename == None:
+        return "None"
+    output = filename.replace('\\','/').split('/')[-1]
+    if output == "":
+        return "None"
+    return output
 
 def select_fm(boolvar, bfm, bfc, bfn):
     #If the button is selected
@@ -197,8 +217,6 @@ def close_options(window):
     #debug print(checker_op.fc)
     #debug print(checker_op.fn)
     sys.stdout.flush()
-    
-    
     
     
 def run_tfsites_checker():
@@ -255,8 +273,10 @@ def run_tfsites_checker():
     
     
 from tkinter import *
+
 master = Tk()
 master.wm_title("NEED A NAME")
+master.iconbitmap(default='venu_flower.ico')
 
 #Options class to be used when calling tfsites_checker
 checker_op = Tfsites_checker_options()
@@ -270,13 +290,10 @@ checker_i = StringVar()
 checker_i.set("Input VCF directory: None")
 checker_o = StringVar()
 checker_o.set("Output directory: None")
-   
-Label(master,text="Tfsites_checker.py arguments:").grid(row=0,sticky=W,pady=10)
-#var1 = IntVar()
-#Checkbutton(master, text="male", variable=var1).grid(row=1, sticky=W)
-#var2 = IntVar()
-#Checkbutton(master, text="female", variable=var2).grid(row=2, sticky=W)
 
+# Motif matching options (tfsites_checker.py)   
+head1=Label(master,text="Transcription Factor (TF) motif matching arguments:")
+head1.grid(row=0,sticky=W,pady=10)
 
 br = Button(master, text='Choose reference file', command=choose_r, width=25)
 br.grid(row=2,sticky=W,padx=5,pady=2)
@@ -298,12 +315,19 @@ Label(master, textvariable=checker_o).grid(row=5,column=1,sticky=W,padx=5)
 
 b_options = Button(master,text='Optional arguments',command=optional_window)
 b_options.config(width=20)
-b_options.grid(row=6,column=0,pady=10,padx=5)
+b_options.grid(row=6,column=0,columnspan=2,pady=10,padx=5)
 
+# Expression filtering options (tfsites_expression.py)
+head2=Label(master,text="Expression filtering arguments:")
+head2.grid(row=7,sticky=W,pady=10)
+
+
+
+# Run and Exit options
 b_quit = Button(master,text='Exit',command=master.quit, width=10)
-b_quit.grid(row=7,column=1,sticky=E, pady=5, padx=5)
+b_quit.grid(row=10,column=1,sticky=E, pady=5, padx=5)
 
 b_run = Button(master,text=' Run ',command=run_tfsites_checker, width=10)
-b_run.grid(row=7,column=0,pady=5)
+b_run.grid(row=10,column=0,pady=5)
 
 mainloop()
