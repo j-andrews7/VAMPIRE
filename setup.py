@@ -1,9 +1,10 @@
 """
-Driven is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions.
+Driven is a full-fledged bioinformatics suite geared towards easy 
+integration of multiple types of big data to make reasonable and interesting biological conclusions.
 """
 from setuptools import find_packages, setup
 
-dependencies = ['click','pyfaidx']
+dependencies = ['click', 'pyfaidx', 'numpy', 'scipy', 'biopython']
 
 setup(
     name='driven',
@@ -34,9 +35,8 @@ setup(
         # 'Development Status :: 6 - Mature',
         # 'Development Status :: 7 - Inactive',
         'Environment :: Console',
-        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
-        'Operating System :: POSIX',
         'Operating System :: MacOS',
         'Operating System :: Unix',
         'Operating System :: Windows',

@@ -1,26 +1,30 @@
 #!/usr/bin/env python
 
 """
+Last modified: 08/23/2016
+Authors: Ethan Pfeifer & Jared Andrews
+
 For a given motif annotated vcf file (already run through tfsites_checker.py)
-    remove all motif matches that are not expressed in the given sample
+remove all motif matches for TFs that are not expressed in the given sample.
     
 Usage: tfsites_checker.py -i <input.vcf> -e <expression.bed>
  -o <output.txt> -c <sample_name>
 
 Args:
-    -i (required) <input.vcf> = Name of variant file to process. Variants must
-        be sorted (from low to high) within a chromosome.
-    -o (required) <output.vcf> = Name of output file to be created.
-    -e (required) <expression.bed> = an expression 'bed' file with the form:
-        chr	START	END	GENE_SYMB	<Sample names delineated by tabs>
+    -i (required) <input.vcf> = Name of sorted variant file to process. 
 
-  -sn (optional) <sample_name> = name of the sample (the name must be present
-        in expression.bed)
-  -th (optional) <5> = Motifs are expressed a match if they are expressed above
-    a given threshold. Default value is 5 (may be a float or int).
-  -fe (optional flag) = If -fe (filter by expression) is included, variants
-    that do not match any motif for an expressed protein will not be included
-    in the output (-o) file.
+    -o (required) <output.vcf> = Name of output file to be created.
+
+    -e (required) <expression.bed> = An expression 'bed' file.
+
+    -sn (optional) <sample_name> = Name of the sample (the name must be present
+        in expression.bed).
+
+    -th (optional) <5> = Motifs are expressed a match if they are expressed above
+      a given threshold. 
+
+    -fe (optional flag) = If used, variants that do not match any motif for 
+      an expressed protein will not be included in the output (-o) file.
 """
 
 #Note: currently this code expects an expression text file of the form:

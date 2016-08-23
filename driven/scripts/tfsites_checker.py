@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 """
+Last modified: 08/23/2016
+Authors: Ethan Pfeifer & Jared Andrews
+
 For a given vcf file (1-based), get reference sequence in which
  it lies and determine if it matches motifs given in a motif file.
 
@@ -9,39 +12,46 @@ Usage: tfsites_checker.py -i <input.vcf> -r <reference.fa>
 Args:
   -i (required) <input.vcf> = Name of variant file to process. Variants must
     be sorted (from low to high) within a chromosome.
+
   -r (required) <reference.fa> = Name of reference sequence 
-    file to get surrounding bases from variant. 3 by default. 
+    file to get surrounding bases from variant. 3 by default.
+
   -m (required) <motif.txt> = Tab-delimited key file containing
     a frequency matrix with each row corresponding to a base
-    and each column corresponding to a position
+    and each column corresponding to a position.
+
   -o (required) <output.vcf> = Name of output file to be created.
 
   -pc (optional) <0.1> = Pseudocounts value to be added to all positions of 
     the motif frequency matrix before calculating the probability matrix. 
-    Default value is 0.1
+
   -th (optional) <0> = Motifs are considered a match if they score above a
     given threshold. This is the default threshold (used if no threshold is
-    specified by motif file). Default value is 0 (may be a float or int).
-  -ws (optional) <50> = Optional wing size to search for weak homotypic
-    matches, co-binding tfs, and GC content. Default value is 100 (int).
+    specified by motif file). 
+
+  -ws (optional) <50> = Optional wing size in bp to search for weak homotypic
+    matches, co-binding tfs, and GC content. 
+
   -bp (optional) <baselines.txt> = A file containing a single line with tab
     delineated values for baseline probabilities for A, C, G, T (in order).
     Probabilities should all be positive and should sum to 1. If none is
-    provided then all are assumed to be equally likely (all are 0.25)
+    provided then all are assumed to be equally likely.
+
   -fm (optional flag) = If -fm (filter with motifs) is included, variants
     that do not match any motif will not be included in the output (-o) file.
-  -ci (optional) <ChIP.bed> = A bed file containing tab delineated columns
-    of the form:
-    chr startpos stoppos TF1;TF2;TF3 (etc)
-    This must have the start positions in order within each chromosome and 
-    must be grouped by chromosome.
+
+  -ci (optional) <ChIP.bed> = A sorted bed-like file containing tab delineated 
+    columns of the form:
+    chr start end TF1;TF2;TF3...
+
   -co (optional) <chip_out.bed> = Name of output bed file to be created.
     A new column will be added with motifs that computationally match each
     peak.
+
   -fp (optional flag) = If -fp (filter with peaks) is included, ChIP peaks
     that do not match any motif will not be included in the output (-co).
-  -sk (optional flag) = If -sk (sorted by karyotype) is included, then the
-    program knows that
+
+  -sk (optional flag) = Use if sorted by karyotype.
 """
 
 import sys

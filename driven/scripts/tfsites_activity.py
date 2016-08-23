@@ -31,7 +31,7 @@ class Vcf:
         else:
             self.out_f = None
         
-        #Initialize current variant (aka current line)
+        # Initialize current variant (aka current line).
         line = self.vcf_f.readline()
         info_needed = True
         info = "##INFO=<ID=EZACT,Number=1,Type=Float,Description="
@@ -83,7 +83,7 @@ class Vcf:
                 info = ""
                 #Matches should have enhancer id, Position object, and zscore
                 for match in self.matches:
-                    (id, pos, zscore) = match
+                    (iden, pos, zscore) = match
                     if info != "":
                         info += ";"
                     info += "EZACT="+sf_str(zscore,3)
@@ -122,11 +122,11 @@ class Vcf:
         line_list = line.split("\t")
         
         #Find variant position
-        chr = line_list[0]
+        chrom = line_list[0]
         start_pos = int(line_list[1])
         ref_seq = line_list[3]
         end_pos = start_pos + len(ref_seq)
-        var_pos = Position(chr, start_pos, end_pos)
+        var_pos = Position(chrom, start_pos, end_pos)
         """
         #Find list of motifs that match
         info_fields = line_list[7].split(";")
@@ -177,12 +177,12 @@ class Vcf:
         return self.name
 
 # Fields:
-#   chr = (string) Chromosome (chr1, chr2, etc)
+#   chrom = (string) Chromosome (chr1, chr2, etc)
 #   start = start position
 #   end = end position
 class Position:
-    def __init__(self, chr, start_pos, end_pos):
-        self.chr = chr
+    def __init__(self, chrom, start_pos, end_pos):
+        self.chrom = chrom
         self.start = start_pos
         self.end = end_pos
         
@@ -202,10 +202,10 @@ class Position:
         if pos_b == None:
             return True
         
-        if self.chr == pos_b.chr:
+        if self.chrom == pos_b.chrom:
             return self.end < pos_b.start
             
-        return self.chr < pos_b.chr
+        return self.chrom < pos_b.chrom
         
     def overlaps(self, pos_b):
         """
@@ -220,7 +220,7 @@ class Position:
         if pos_b == None:
             return False
         
-        if self.chr != pos_b.chr:
+        if self.chrom != pos_b.chr:
             return False
         
         start_max = max(self.start, pos_b.start)
@@ -243,13 +243,13 @@ class Position:
         if pos_b == None:
             return True
             
-        if self.chr == pos_b.chr:
+        if self.chrom == pos_b.chrom:
             return self.start < pos_b.start
             
-        return self.chr < pos_b.chr
+        return self.chrom < pos_b.chrom
     
     def __str__(self):
-        return self.chr+":"+str(self.start)+"-"+str(self.end)
+        return self.chrom + ":" + str(self.start) + "-" + str(self.end)
         
 
 class Options_list:
@@ -282,19 +282,19 @@ def get_next_activity(open_activity_file):
     line_list = line.strip().split('\t')
     
     #Get position
-    chr = line_list[0]
+    chrom = line_list[0]
     start_pos = int(line_list[1])
     end_pos = int(line_list[2])
-    pos = Position(chr, start_pos, end_pos)
+    pos = Position(chrom, start_pos, end_pos)
     
-    id = line_list[3]
+    iden = line_list[3]
     
     #Get activity scores for samples
     samples_act = []
     for idx in range(4,len(line_list)):
         samples_act.append(float(line_list[idx]))
         
-    return (pos, id, samples_act)
+    return (pos, iden, samples_act)
 
 def output_activity(open_file, enh_pos, enh_id, matches, ref_l,var_l, options):
     
@@ -306,7 +306,7 @@ def output_activity(open_file, enh_pos, enh_id, matches, ref_l,var_l, options):
     if len(matches) < options.filter_bed_num:
         return
     
-    line=enh_pos.chr+'\t'+str(enh_pos.start)+'\t'+str(enh_pos.end)+'\t'+enh_id
+    line=enh_pos.chrom+'\t'+str(enh_pos.start)+'\t'+str(enh_pos.end)+'\t'+enh_id
     #print number of samples affected
     if len(matches) > 0:
         line+="\tsig_diff="+str(len(matches))+",have_var="+str(var_l)
@@ -446,7 +446,7 @@ for idx in range(len(vcfs)):
 # (Position object, id, activity list)
 #Current enhancer region
 (enh_pos, enh_id, enh_act) = get_next_activity(act_f)
-print("\tAnalyzing "+enh_pos.chr+"...")
+print("\tAnalyzing "+enh_pos.chrom+"...")
 matches = []
 # Other enhancers that overlap the current variant
 #other_enh = []
@@ -539,7 +539,7 @@ while flag < 2 and enh_pos != None:
         #Print any errors to error file
         elif err_f != None:
             #Z-score not calculated (insufficient samples or 0 variance)
-            err_line = enh_pos.chr+'\t'+str(enh_pos.start)+'\t'
+            err_line = enh_pos.chrom+'\t'+str(enh_pos.start)+'\t'
             err_line+= str(enh_pos.end)+'\t'+enh_id+'\t'
             
             err_act = ""
@@ -590,13 +590,13 @@ while flag < 2 and enh_pos != None:
     #If no overlapping variant was found, go to next enhancer peak
     else:
         output_activity(out_f, enh_pos, enh_id, matches, 0, 0, options)
-        prev_chr = enh_pos.chr
+        prev_chr = enh_pos.chrom
         #debug if len(matches) > 0:
         #    flag += 1
         matches = []
         (enh_pos, enh_id, enh_act) = get_next_activity(act_f)
-        if enh_pos != None and prev_chr != enh_pos.chr:
-            print("\tAnalyzing "+enh_pos.chr+"...")
+        if enh_pos != None and prev_chr != enh_pos.chrom:
+            print("\tAnalyzing "+enh_pos.chrom+"...")
     
     sys.stdout.flush()
     

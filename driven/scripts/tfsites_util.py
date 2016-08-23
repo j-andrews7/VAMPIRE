@@ -1,38 +1,49 @@
 #!/usr/bin/env python
 """
-Calculate motif thresholds for a given motif file and print a new file.
+Last modified: 08/23/2016
+Authors: Ethan Pfeifer & Jared Andrews
+
+Calculate motif thresholds for a given motif file and print to a new file.
 
 Usage:
     tfsites_util.py -m <motifs.txt> -o <output.txt>
 
 Args:
-    -m = (required) <motifs.txt> Motif filename of the frequency matrix list
-    -o = (required) <output.txt> Motif Output filename to print to
+    -m (required) = Input filename of a file containing PWMs.
+
+    -o (required) = Output filename.
+
     -bp (optional) <baselines.txt> = A file containing a single line with tab
         delineated values for baseline probabilities for A, C, G, T (in order).
         Probabilities should all be positive and should sum to 1. If none is
         provided then all are assumed to be equally likely (all are 0.25).
+
     -pc (optional) <0.1> = Pseudocounts value to be added to all positions of 
         the motif frequency matrix before calculating the probability matrix. 
-        Default value is 0.1
-    -th = (optional) <0.0> default ThresHold value. This is used if the 
+        
+    -th (optional) <0.0> = Default threshold value. This is used if the 
         calculated threshold is lower.
         Ex: default_th = 0.0, biopython calculates threshold needed for
         a given false positive rate is -1.23, threshold printed will be
-        0.0
-    -fpr = (optional) <0.05> acceptable false positive rate. This default 
-        corresponds to using a p-value cutoff of 0.05
-    -pe = (optional) <4> precision exponent used by biopython. Making this
-        greater than 5 may result in extremely slow run times. Using a lower
-        number will result in faster (but potentially innacurate) calculations.
-    -ow = (optional flag) OverWrite: If present, thresholds already present in
-        the input file (-m) will be replaced in the output file (-mo)
-    thresholds_list = list of thresholds calculated by biopython
+        0.0.
+
+    -fpr (optional) <0.05> = Acceptable false positive rate for defining 
+        thresholds for each motif. 
+
+    -pe (optional) <4> = Precision exponent used by for threshhold calculations. 
+        Making this greater than 5 may result in extremely slow run times. Using 
+        a lower number will result in faster (but potentially innacurate) 
+        calculations.
+
+    -ow (optional flag) = OverWrite: If present, thresholds already present in
+        the input file will be replaced in the output file.
 """
+
 from Bio import motifs
 import sys
 import argparse
 parser = argparse.ArgumentParser(usage=__doc__)
+
 
 def get_baseline_probs(baseline_f):
     """
@@ -45,7 +56,8 @@ def get_baseline_probs(baseline_f):
     
     Returns:
         Array with probabilities as a float array of the form:
-        [ PrA, PrC, PrT, PrG ]  """
+        [ PrA, PrC, PrT, PrG ]  
+    """
     
     #Default baseline probability numbers (assumes all are equally likely)
     bp_array = [0.25, 0.25, 0.25, 0.25]
@@ -73,7 +85,8 @@ def get_baseline_probs(baseline_f):
             "Continuing with:")
         return bp_array
 
-def output_motifs(input, output, default_th, overwrite, thresholds_list):
+
+def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
     """
     Read in and calculate probability matrices from a frequency matrix file.
     
@@ -93,29 +106,28 @@ def output_motifs(input, output, default_th, overwrite, thresholds_list):
     Returns:
         Motif sequences with names as a list of 
         (id, name, threshold, weight matrix) triples (tuples) from the motif
-        (.txt) file. Also returns maximum length motif."""
+        (.txt) file. Also returns maximum length motif.
+    """
 
     output_f = open(output,"w")
     idx = 0
              
     # Open provided motif file
-    with open(input) as f:
+    with open(input_f) as f:
 
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n 
         # arrays for C, G, T - each with same format as A 
         id = "No id found"
         name = "No name found"
-        #index for which line you are looking at in the motif matrix
+        # Index for line in the motif matrix.
         i = 0
-        #position frequency matrix (read in then reprinted unchanged)
+        # Position frequency matrix (read in then reprinted unchanged)
         pfm = ["","","",""]
         given_thresh = None
         
         # Iterate through file line by line.
         for line in f:
-        
-
             
             #First line contains id and name
             if i == 0:
