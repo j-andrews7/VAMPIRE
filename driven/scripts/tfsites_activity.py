@@ -1,12 +1,11 @@
 #!/usr/bin/env python
+# TO_DO - Write doc string, usage statement, etc. Clean up old comments, debug statements, etc.
 
 import os
 import sys
 import argparse
-#Standard deviation and mean for z-scores
 from numpy import std
 from numpy import mean
-#Needed to round by significant figures
 from math import ceil
 from math import log10
 
@@ -34,13 +33,11 @@ class Vcf:
         # Initialize current variant (aka current line).
         line = self.vcf_f.readline()
         info_needed = True
-        info = "##INFO=<ID=EZACT,Number=1,Type=Float,Description="
-        info += "\"Enhancer z-score for activity "
-        info += "(variant activity vs reference activity)\">"
+        info = '##INFO=<ID=EZACT,Number=1,Type=Float,Description="Enhancer z-score for activity (variant activity vs reference activity)">'
         
-        #Skip info lines
+        # Skip info lines.
         while line.startswith("#"):
-        #Print new info lines at the top of the ##INFO section
+        # Print new info lines at the top of the ##INFO section.
             if self.out_f != None:
                 if info_needed and line.startswith("##INFO"):
                     print(info, file=self.out_f)
@@ -48,10 +45,10 @@ class Vcf:
                 print(line, file=self.out_f, end="")
             line = self.vcf_f.readline()
         
-        #Current variant
+        # Current variant.
         self.parse_line(line)
         
-    #Outputs old variant if output path is given
+    # Outputs old variant if output path is given.
     def next_variant(self, options):
         if self.out_f != None:
             self.output_var(options)
@@ -65,23 +62,23 @@ class Vcf:
 
         self.parse_line(line)
     
-    #Remember to check if self.out_f is present before calling output_var
+    # Remember to check if self.out_f is present before calling output_var.
     def output_var(self, options):
     
-        #If the filter vcf option is on, don't print variants that don't
-        # have an expression z-score (above the threshold if present)
+        # If the filter vcf option is on, don't print variants that don't
+        # have an expression z-score (above the threshold if present).
         if options.filter_vcf and len(self.matches) == 0:
             return
         
         line_list = self.original_line.split("\t")
         
-        #Initialize the line to be printed
+        # Initialize the line to be printed
         line = line_list[0]
         for idx in range(1,len(line_list)):
-            #The INFO column
+            
             if idx == 7 and len(self.matches) > 0:
                 info = ""
-                #Matches should have enhancer id, Position object, and zscore
+                # Matches should have enhancer id, Position object, and zscore
                 for match in self.matches:
                     (iden, pos, zscore) = match
                     if info != "":
@@ -255,22 +252,21 @@ class Position:
 class Options_list:
     def __init__(self):
     
-        #Should lines in the vcf output files be excluded 
+        # Should lines in the vcf output files be excluded 
         # if they don't have activity?
         # -fv tag sets this to True
         self.filter_vcf = False
         
-        #Should lines in the activity (bed) output file be excluded
+        # Should lines in the activity (bed) output file be excluded
         # if they don't match a motif?
         # -fa sets this to True
         self.filter_bed = False
         
-        #Only print activity if it affects more samples than this number
+        # Only print activity if it affects more samples than this number
         # default is -1 so a region with any number of samples affected
         # (having z-scores above threshold) will be output.
         self.filter_bed_num = 0
         
-####-METHODS-####
 
 def get_next_activity(open_activity_file):
 
@@ -295,6 +291,7 @@ def get_next_activity(open_activity_file):
         samples_act.append(float(line_list[idx]))
         
     return (pos, iden, samples_act)
+
 
 def output_activity(open_file, enh_pos, enh_id, matches, ref_l,var_l, options):
     
@@ -331,8 +328,10 @@ def output_activity(open_file, enh_pos, enh_id, matches, ref_l,var_l, options):
         
     print(line, file=open_file)
 
+
 def sf_str( x, n ):
-    """ Rounds x to a certain number of significant figures.
+    """ 
+    Rounds x to a certain number of significant figures.
         Returns the output as a string
         Ex:
         round(0.01234567, 3) -> 0.0123
@@ -343,9 +342,12 @@ def sf_str( x, n ):
         x = float to be rounded
         n = number of sig figs
     
-    Returns: a string """
+    Returns: a string 
+    """
+
     return str(round(x, int(n-ceil(log10(abs(x))))))
-    
+
+
 ####-PARSER-####
 parser = argparse.ArgumentParser(usage=__doc__)
 
@@ -389,7 +391,7 @@ if err_file != None:
 
 print("CHROM\tSTART\tEND\tID\tSAMPLES_INFO\tVARIANTS",file=out_f)
 
-#Make the vcf output directory if it does not exist
+# Make the vcf output directory if it does not exist.
 vcf_out_dir_path = None
 if args.vcf_out_dir != None and args.vcf_out_dir != vcf_dir:
     vcf_out_dir_path = os.path.join(os.getcwd(),args.vcf_out_dir)
@@ -397,31 +399,31 @@ if args.vcf_out_dir != None and args.vcf_out_dir != vcf_dir:
         os.makedirs(vcf_out_dir_path)
         
 headers = act_f.readline().strip().split('\t')
-#vcfs will be an array of Vcf objects based on the headers in the activity
+# Vcfs will be an array of Vcf objects based on the headers in the activity
 # file. The 4 is because the first four columns are not activity scores.
 vcfs = [None for idx in range(len(headers)-4)]
-#Currently unused
+# Currently unused.
 not_found = []
 
 print("Opening vcfs.")
 sys.stdout.flush()
 
-#This loop initializes vcfs.
-# First four entries are CHROM START END ID
-# After that should be samples of the form SAMPLE_OTHERINFO
+# This loop initializes vcfs.
+# First four entries are CHROM START END ID.
+# After that should be samples of the form SAMPLE_OTHERINFO.
 for idx in range(4,len(headers)):
-    #Split on underscore then take the first part
+    # Split on underscore then take the first part.
     sample_n = headers[idx].split('_')[0]
     #debug print("SAMPLE: "+sample_n)
-    #Find and open the correct vcf based on the sample name
-    #getwcd - gets current working directory
+    # Find and open the correct vcf based on the sample name
+
     path = os.path.join(os.getcwd(),vcf_dir)
     for vcf_filename in os.listdir(path):
-        #Create a Vcf object for the vcf filename that matches the sample name
+        # Create a Vcf object for the vcf filename that matches the sample name.
         vcf_path = os.path.join(path,vcf_filename)
         if os.path.isfile(vcf_path) and sample_n in vcf_filename:
-            #Vcf output not currently implemented
-            #debug print("Vcf found: <"+vcf_path+">")
+            # Vcf output not currently implemented.
+            # debug print("Vcf found: <"+vcf_path+">")
             vcf_out_path = None
             if vcf_out_dir_path != None:
                 vcf_out_path = os.path.join(vcf_out_dir_path,vcf_filename)
@@ -442,18 +444,18 @@ for idx in range(len(vcfs)):
         print("None found")
 """
 
-#Enhancer data is of the form:
+# Enhancer data is of the form:
 # (Position object, id, activity list)
-#Current enhancer region
+# Current enhancer region
 (enh_pos, enh_id, enh_act) = get_next_activity(act_f)
 print("\tAnalyzing "+enh_pos.chrom+"...")
 matches = []
 # Other enhancers that overlap the current variant
-#other_enh = []
+# other_enh = []
 # Next enhancer (does not overlap current variant)
-#next_enh = None
+# next_enh = None
 
-#debug flag - can set so that only a certain num of matches are calc'd
+# debug flag - can set so that only a certain num of matches are calc'd
 flag = 0
 
 #Process enhancer regions
@@ -580,14 +582,14 @@ while flag < 2 and enh_pos != None:
             #debug print("Incrementing "+str(vcfs[idx]))
             vcfs[idx].next_variant(options)
 
-        #Print overlapping variants on same line, remove block to print all variants
-        # from same enhancer peak together
+        # Print overlapping variants on same line, remove block to print all variants
+        # from same enhancer peak together.
         ref_l = len( ref_samples_act )
         var_l = len( var_samples_idx )
         output_activity(out_f, enh_pos, enh_id, matches, ref_l, var_l, options)
         matches = []
     
-    #If no overlapping variant was found, go to next enhancer peak
+    # If no overlapping variant was found, go to next enhancer peak.
     else:
         output_activity(out_f, enh_pos, enh_id, matches, 0, 0, options)
         prev_chr = enh_pos.chrom
