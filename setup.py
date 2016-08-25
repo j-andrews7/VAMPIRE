@@ -1,5 +1,5 @@
 """
-VENUS is a set of tools to identify and prioritize variants that alter TF binding, affect gene 
+VENUSAUR is a set of tools to identify and prioritize variants that alter TF binding, affect gene 
 expression, and change regulatory element activity.
 """
 from setuptools import find_packages, setup
@@ -7,13 +7,13 @@ from setuptools import find_packages, setup
 dependencies = ['click>=6', 'pyfaidx', 'scipy', 'biopython']
 
 setup(
-    name='venus',
+    name='venusaur',
     version='0.1.0',
-    url='https://github.com/j-andrews7/DRIVEN',
+    url='https://github.com/j-andrews7/VENUSAUR',
     license='MIT',
     author='Payton Lab',
     author_email='jared.andrews07@gmail.com',
-    description='VENUS is a set of tools to identify and prioritize variants that alter TF binding, affect gene expression, and change regulatory element activity',
+    description='VENUSAUR is a set of tools to identify and prioritize variants that alter TF binding, affect gene expression, and change regulatory element activity',
     long_description=__doc__,
     packages=find_packages(exclude=['tests']),
     include_package_data=True,
@@ -23,7 +23,7 @@ setup(
     keywords='variant genomics biology bioinformatics epigenetic chromatin transcription motif research',
     entry_points={
         'console_scripts': [
-            'venus = venus.venus:cli',
+            'venusaur = venusaur.venusaur:cli',
         ],
     },
     classifiers=[
