@@ -1,8 +1,8 @@
-# DRIVEN
+# VENUS
 
-DRIVEN is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions. Designed to be *modular* so that each tool is useful in its own right, but also capable of being a pipeline in and of itself, DRIVEN aims to help scientists and clinicians better understand the differences between their data sets.
+VENUS is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions. Designed to be *modular* so that each tool is useful in its own right, but also capable of being a pipeline in and of itself, VENUS aims to help scientists and clinicians better understand the differences between their data sets.
 
-There are a number of potential uses for DRIVEN, such as:
+There are a number of potential uses for VENUS, such as:
  - Scanning VCF files for variants that perturb or create new TF motifs.
  - Identifying differential ChIP-seq peaks between samples.
     - Corroborating these differences with gene expression.
@@ -19,5 +19,5 @@ None, cause it ain't released yet.
 # New Stuff
 # Usage
 
-    $ driven --help
+    $ venus --help
 

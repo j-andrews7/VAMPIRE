@@ -1,5 +1,8 @@
 import click
-
+import driven.utils
+import driven.motifs
+import driven.activity
+import driven.expression
 
 @click.command()
 @click.option('--as-cowboy', '-c', is_flag=True, help='Greet as a cowboy.')
