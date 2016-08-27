@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 """
-Last modified: 08/25/2016
-Authors: Ethan Pfeifer & Jared Andrews
-
 Calculate motif thresholds for a given motif file and print to a new file.
 
 Usage:
@@ -10,31 +7,24 @@ Usage:
 
 Args:
     -m (required) = Input filename of a file containing PWMs.
-
     -o (required) = Output filename.
-
     -bp (optional) <baselines.txt> = A file containing a single line with tab
         delineated values for baseline probabilities for A, C, G, T (in order).
         Probabilities should all be positive and should sum to 1. If not
         provided then all are assumed to be equally likely (all are 0.25).
-
     -pc (optional) <0.1> = Pseudocounts value to be added to all positions of 
         the motif frequency matrix before calculating the probability matrix. 
-        
     -th (optional) <0.0> = Default threshold value. This is used if the 
         calculated threshold is lower.
         Ex: default_th = 0.0, biopython calculates threshold needed for
         a given false positive rate is -1.23, threshold printed will be
         0.0.
-
     -fpr (optional) <0.05> = Acceptable false positive rate for defining 
         thresholds for each motif. 
-
     -pe (optional) <4> = Precision exponent used by for threshhold calculations. 
         Making this greater than 5 may result in extremely slow run times. Using 
         a lower number will result in faster (but potentially innacurate) 
         calculations.
-
     -ow (optional flag) = OverWrite: If present, thresholds already present in
         the input file will be replaced in the output file.
 """

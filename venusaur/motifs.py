@@ -1,17 +1,12 @@
 #!/usr/bin/env python
 """
-Last modified: 08/25/2016
-Authors: Ethan Pfeifer & Jared Andrews
+For a given vcf file, compare each variant and it's reference sequence to
+a set of motifs to determine if any are significantly altered.
 
-For a given vcf file (1-based), get reference sequence in which
- it lies and determine if it matches motifs given in a motif file.
-
-Usage: motifs.py -i <input.vcf> -r <reference.fa>
- -m <motif.txt> -o <output.vcf>
+Usage: motifs.py -i <input.vcf> -r <reference.fa> -m <motif.txt> -o <output.vcf> [OPTIONS]
 
 Args:
-  -i (required) <input.vcf> = Name of variant file to process. Variants must
-    be sorted (from low to high) within a chromosome.
+  -i (required) <input.vcf> = Name of sorted variant file to process. 
 
   -r (required) <reference.fa> = Name of reference sequence 
     file to get surrounding bases from variant. 3 by default.
@@ -55,13 +50,13 @@ Args:
 """
 
 import sys
-# Used for command line options and such
 import argparse
-from pyfaidx import Fasta
 parser = argparse.ArgumentParser(usage=__doc__)
 from math import log2
 from math import ceil
 from math import log10
+
+from pyfaidx import Fasta
 from Bio import motifs
 
 ####-Classes-####

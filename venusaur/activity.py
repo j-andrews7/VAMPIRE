@@ -177,8 +177,6 @@ class Vcf:
 #   chrom = (string) Chromosome (chr1, chr2, etc)
 #   start = start position
 #   end = end position
-
-
 class Position:
 
     def __init__(self, chrom, start_pos, end_pos):

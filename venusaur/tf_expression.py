@@ -1,29 +1,18 @@
 #!/usr/bin/env python
 """
-Last modified: 08/25/2016
-Authors: Ethan Pfeifer & Jared Andrews
-
 For a given motif annotated vcf file (already run through motifs.py)
 remove all motif matches for TFs that are not expressed in the given sample.
     
-Usage: tf_expression.py -i <input.vcf> -e <expression.bed>
- -o <output.txt> -c <sample_name>
+Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.txt> -c <sample_name>
 
 Args:
     -i (required) <input.vcf> = Name of sorted variant file to process. 
-
     -o (required) <output.vcf> = Name of output file to be created.
-
     -e (required) <expression.bed> = An expression 'bed' file.
-
-    -sn (optional) <sample_name> = Name of the sample (the name must be present
-        in expression.bed).
-
-    -th (optional) <5> = TFs are considered expressed if they are above
-        this threshold. 
-
+    -sn (optional) <sample_name> = Name of the sample (the name must be present in expression.bed).
+    -th (optional) <5> = TFs are considered expressed if they are above this threshold. 
     -fe (optional flag) = If used, variants that do not match any motif for 
-        an expressed protein will not be included in the output (-o) file.
+        an expressed protein will not be included in the output file.
 """
 
 # Note: currently this code expects an expression text file of the form:
@@ -39,18 +28,6 @@ parser = argparse.ArgumentParser(usage=__doc__)
 from math import ceil
 from math import log10
 
-####-CLASSES-####
-# Not strictly necessary, but may be useful if other options are added
-
-
-class Options_list:
-
-    def __init__(self):
-        # Should lines in the vcf output file be excluded
-        # if they don't have expression data?
-        # -fe tag sets this to True
-        self.filter_vcf = False
-
 ####-FUNCTIONS-####
 
 
@@ -58,20 +35,18 @@ def get_next_var(opened_file):
     """
     Reads in the next line of the vcf and returns the next variant's info
 
-    Args: opened_file = an already open input .vcf file
+    Args: 
+        opened_file (str): An already open input .vcf file
 
-    Returns: None or a line info tuple with the following information
-        (str list) motif names
-        (list list) other motif info fields
-            each other field has the info name as the first object
+    Returns: 
+        motifsn (list): List of motif names.
+        motif_other (list): List of lists containing other motif info fields.
+            each other field has the INFO name as the first object
             ex: ["MOTIFV",["0.5", "0.24"]] -> MOTIFV=0.5;0.24
-        (str list) other info fields
-        (str) original line
+        other_info (list): List of other INFO fields.
+        line (str): Original line.
     """
-
-    line = opened_file.readline()
-
-    line = line.strip()
+    line = opened_file.readline().strip()
 
     # input file is empty
     if line == "":
@@ -189,7 +164,7 @@ def update_vcf(line_tup, output_f, options):
         names += motifns[idx]
         for idy in range(len(str_m_os)):
             str_m_os[idy] += motifos[idy][1][idx]
-        explevels += sf_str(motifes[idx], 4)
+        explevels += round(motifes[idx], 4)
 
     # If there are no matches, print the line unchanged or filter it out (return
     # without printing)
@@ -225,37 +200,11 @@ def update_vcf(line_tup, output_f, options):
     return
 
 
-def sf_str(x, n):
-    """ Rounds x to a certain number of significant figures.
-        Returns the output as a string
-        Ex:
-        round(0.01234567, 3) -> 0.0123
-        round(234.5678, 4) -> 234.6
-        round(1234.56, 2) -> 1200 
-
-    Args:
-        x = float to be rounded
-        n = number of sig figs
-
-    Returns: a string """
-    return str(round(x, int(n - ceil(log10(abs(x))))))
-
-
-def std_gene_name(gene_name):
-    """
-    Returns standard format for gene name
-        This function can be updated later to convert between standard names
-    """
-    return gene_name.upper()
-
-
 ####-PARSER-####
 # Create arguments and options
 parser.add_argument("-i", "--input", dest="input_file", required=True)
 parser.add_argument("-e", "--expression", dest="exp_file", required=True)
 parser.add_argument("-o", "--output", dest="output_file", required=True)
-parser.add_argument("-sn" "--sample_name", dest="sample_name",
-                    required=False, default=None)
 parser.add_argument("-th", "--threshold", dest="threshold",
                     required=False, default=5)
 parser.add_argument("-fe", "--filter_e", action="count", required=False)
@@ -335,15 +284,15 @@ with open(inp_file) as vcf:
         f_motifes = []
 
         for idx in range(len(motifns)):
-            motif_name = motifns[idx]
+            motif_name = motifns[idx].upper()
             # Genes are only in the dictionary if their expression is above
             # the given threshold. Add them to the filtered lists if they are
             # expressed.
             # Standard gene name used (works if cases are different for now)
-            std_name = std_gene_name(motif_name)
-            if std_name in gene_dict:
+
+            if motif_name in gene_dict:
                 # Add expression level
-                f_motifes.append(gene_dict[std_name])
+                f_motifes.append(gene_dict[motif_name])
                 # Add name and other data
                 f_motifns.append(motifns[idx])
                 for idy in range(len(motifos)):
