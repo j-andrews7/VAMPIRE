@@ -42,7 +42,7 @@ def parse_header(line):
 
 
 # TODO - Function to get lists of motifs above threshold and below for a list of motif names & 
-# the gene dict.
+# the gene dict. 
 
 def process_line(line, filt, output_f, gene_dict):
     """
