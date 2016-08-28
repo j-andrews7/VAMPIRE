@@ -1,42 +1,33 @@
 #!/usr/bin/env python
 """
 For a given motif annotated vcf file (already run through motifs.py)
-remove all motif matches for TFs that are not expressed in the given sample.
+remove all motif matches for TFs that are not expressed in at least one sample.
     
-Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.txt> -c <sample_name>
+Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.txt> [OPTIONS]
 
 Args:
-    -i (required) <input.vcf> = Name of sorted variant file to process. 
-    -o (required) <output.vcf> = Name of output file to be created.
-    -e (required) <expression.bed> = An expression 'bed' file.
-    -sn (optional) <sample_name> = Name of the sample (the name must be present in expression.bed).
-    -th (optional) <5> = TFs are considered expressed if they are above this threshold. 
-    -fe (optional flag) = If used, variants that do not match any motif for 
+    -i (required) <input.vcf>: Name of sorted variant file to process. 
+    -o (required) <output.vcf>: Name of output file to be created.
+    -e (required) <expression.bed>: An expression 'bed' file.
+    -th (optional) <5>: TFs are considered expressed if they are above this threshold. 
+    -fe (optional flag): If used, variants that do not match any motif for 
         an expressed protein will not be included in the output file.
 """
-
-# Note: currently this code expects an expression text file of the form:
-# GENE_NAME <Sample names delineated by tabs>
-# To change where gene name is expected, go to line 128
-# gene_name = line_list[0]
-# where [0] works for the above configuration and [3] works for a 'bed' file
-# 'bed' file: chr	START	END	GENE_SYMB	<Sample names delineated by tabs>
-
 import sys
 import argparse
-parser = argparse.ArgumentParser(usage=__doc__)
 from math import ceil
 from math import log10
 
-####-FUNCTIONS-####
 
+def parse_header(line):
+# TODO - Get sample names and list of columns for each
 
-def get_next_var(opened_file):
+def parse_line(line):
     """
-    Reads in the next line of the vcf and returns the next variant's info
+    Parse a vcf record and return various info.
 
     Args: 
-        opened_file (str): An already open input .vcf file
+        opened_file (file object): An open .vcf file. 
 
     Returns: 
         motifsn (list): List of motif names.
@@ -46,11 +37,7 @@ def get_next_var(opened_file):
         other_info (list): List of other INFO fields.
         line (str): Original line.
     """
-    line = opened_file.readline().strip()
-
-    # input file is empty
-    if line == "":
-        return None
+    line = line.strip()
 
     # Find list of motifs that match
     line_list = line.split("\t")
@@ -82,29 +69,32 @@ def get_next_var(opened_file):
     return (motifns, motif_other, other_info, line)
 
 
-def get_genes(opened_file, cell_line, threshold):
+def get_genes(opened_file, sample, threshold):
     """
-    Reads in and parses the .bed expression file
+    Reads in and parses the .bed expression file.
 
     Args: 
         opened_file = an already open input .bed file
-        cell_line = (string) name of the cell line or sample in question
-        threshold = (float) expression threshold to count the gene as expressed
+        sample (str): Name of the sample in question.
+        threshold (float): Expression threshold to filter lowly/unexpressed genes.
 
-    Returns: gene_dict = (str -> float) a dictionary of:
+    Returns: 
+        gene_dict = (str -> float) a dictionary of:
         gene names -> expression levels
     """
 
-    # find which column is the cell_line (contains relevant expression data)
+    # Get sample column.
+    # TODO - Only get expression values for samples in VCF.
+
     headers = opened_file.readline().strip().split('\t')
-    cell_line_idx = -1
+    sample_idx = -1
     for idx in range(len(headers)):
-        if headers[idx].upper() == cell_line.upper():
-            cell_line_idx = idx
+        if headers[idx].upper() == sample.upper():
+            sample_idx = idx
             break
 
-    if cell_line_idx == -1:
-        print("Err: Sample <" + cell_line + "> not found in input file header.")
+    if sample_idx == -1:
+        print("Err: Sample <" + sample + "> not found in input file header.")
         return []
 
     gene_names = []
@@ -112,40 +102,38 @@ def get_genes(opened_file, cell_line, threshold):
 
     # Read in expression levels for each gene
     for line in opened_file:
-        line_list = line.strip().split('\t')
-        # Only add the gene to the list if its expression is above the threshold
-        gene_name = line_list[0]
-        exp_level = float(line_list[cell_line_idx])
+        gene_name = line.strip().split('\t')[3].upper()
+        # Only add the gene to the list if its expression is above the threshold.
+        exp_level = float(line_list[sample_idx])
         if exp_level >= threshold:
             # Add gene names and expression values to respective lists
-            gene_names.append(std_gene_name(gene_name))
+            gene_names.append(gene_name)
             exp_values.append(exp_level)
 
     return dict(zip(gene_names, exp_values))
 
 
-def update_vcf(line_tup, output_f, options):
+def print_record(line_tup, output_f, filt):
     """
-    Updates the output file with the output in the correct variant call format
+    Print a record to the output file.
+
+    If filt is True, then the record won't be printed to output unless it 
+    has a motif match to a TF that is expressed in one of the samples.
 
     Args:
-        None or a line info tuple with the following information
-            (str list) motif names
+        line_tup (tup): Info tuple with the following information
+            (list) Motif names as strings.
             (str list list) list of lists of other motif info
             (str list) other info fields
-            (str) original line
-        output_f = output vcf
-        options = options list
-
-    Returns: Nothing (updates output_f instead of returning)
+            (str) Original line
+        output_f (string): Name of output file.
+        filt (bool): True if only records with a motif for a TF meeting the expression
+            threshold should be output. False otherwise.
     """
-
+    # Unpack info tuple.
     (motifns, motifos, motifes, oth_info, line) = line_tup
 
-    # First 8 columns should always be:
-    # CHROM  POS ID  REF ALT QUAL    FILTER  INFO
-    line = line.strip()
-    columns = line.split('\t')
+    columns = line.strip().split('\t')
 
     # Strings for motif info fields
     str_m_os = ["" for idx in range(len(motifos))]
@@ -168,7 +156,7 @@ def update_vcf(line_tup, output_f, options):
 
     # If there are no matches, print the line unchanged or filter it out (return
     # without printing)
-    if len(motifns) == 0 and options.filter_vcf == True:
+    if len(motifns) == 0 and filt == True:
         return
 
     outline = ""
@@ -200,108 +188,93 @@ def update_vcf(line_tup, output_f, options):
     return
 
 
-####-PARSER-####
-# Create arguments and options
-parser.add_argument("-i", "--input", dest="input_file", required=True)
-parser.add_argument("-e", "--expression", dest="exp_file", required=True)
-parser.add_argument("-o", "--output", dest="output_file", required=True)
-parser.add_argument("-th", "--threshold", dest="threshold",
-                    required=False, default=5)
-parser.add_argument("-fe", "--filter_e", action="count", required=False)
+def main(inp_file, exp_file, out_file, th, filt):
+    # TODO - Get sample names.
 
-args = parser.parse_args()
+    gene_dict = []
+    with open(exp_file) as opened_ef:
+        gene_dict = get_genes(opened_ef, sample_name, th)
 
-# Easier to use argument variables
-inp_file = args.input_file
-exp_file = args.exp_file
-out_file = args.output_file
-th = float(args.threshold)
+    if len(gene_dict) == 0:
+        print("Error, no genes above threshold found in expression file.")
+        sys.exit()
 
-# Options list. Easier to pass in functions or use in code updates.
-options = Options_list()
-options.filter_vcf = (args.filter_e != None)
+    # Open output file.
+    output_f = open(out_file, "w")
 
-# Get sample name
-sample_name = args.sample_name
-if sample_name == None:
-    # Last part of input after slashes
-    file_name = inp_file.split('\\')[-1].split('/')[-1]
-    # First part of filename before period
-    sample_name = file_name.split('.')[0]
+    with open(inp_file) as vcf:
 
-####-MAIN-####
-# Read in expression .bed file
-gene_dict = []
-with open(exp_file) as opened_ef:
-    gene_dict = get_genes(opened_ef, sample_name, th)
-# debug print(gene_dict)
-if len(gene_dict) == 0:
-    # break or something
-    print("Error, no genes above threshold found")
-
-# Open output file.
-output_f = open(out_file, "w")
-
-
-with open(inp_file) as vcf:
-
-    line = vcf.readline()
-
-    info_needed = True
-    info = "##INFO=<ID=MOTIFE,Number=.,Type=Float,Description="
-    info += "\"Motif expression level z-score\">"
-
-    # Skip info lines
-    while line.startswith("##"):
-        # Print new info lines at the top of the ##INFO section
-        if info_needed and line.startswith("##INFO"):
-            print(info, file=output_f)
-            info_needed = False
-        print(line, file=output_f, end="")
         line = vcf.readline()
 
-    # First non-## line is a header
-    print(line, file=output_f, end="")
+        # Skip info lines.
+        while line.startswith("##"):
+            print(line, file=output_f, end="")
+            line = vcf.readline()
 
-    current_var = get_next_var(vcf)
+        # First non-## line is the header.
+        # TODO - Parse header.
+        print(line, file=output_f, end="")
 
-    while current_var != None:
+        for line in vcf:
+            current_var = parse_line(line)
 
-        (motifns, motifos, oi, line) = current_var
 
-        # Filter motifs by expression
-        f_motifns = []
+            (motifns, motifos, oi, line) = current_var
 
-        # Copy names into filtered motifs list
-        f_motifos = []
-        for idx in range(len(motifos)):
-            # Stored as:
-            # ["MOTIFC", ['Y','N','Y','Y']] -> MOTIFC=Y,N,Y,Y
-            info_name = motifos[idx][0]
-            f_motifos.append([info_name, []])
+            # Filter motifs by expression
+            f_motifns = []
 
-        # Expression level of motifs
-        f_motifes = []
+            # Copy names into filtered motifs list
+            f_motifos = []
+            for idx in range(len(motifos)):
+                # Stored as:
+                # ["MOTIFC", ['Y','N','Y','Y']] -> MOTIFC=Y,N,Y,Y
+                info_name = motifos[idx][0]
+                f_motifos.append([info_name, []])
 
-        for idx in range(len(motifns)):
-            motif_name = motifns[idx].upper()
-            # Genes are only in the dictionary if their expression is above
-            # the given threshold. Add them to the filtered lists if they are
-            # expressed.
-            # Standard gene name used (works if cases are different for now)
+            # Expression level of motifs
+            f_motifes = []
 
-            if motif_name in gene_dict:
-                # Add expression level
-                f_motifes.append(gene_dict[motif_name])
-                # Add name and other data
-                f_motifns.append(motifns[idx])
-                for idy in range(len(motifos)):
-                    f_motifos[idy][1].append(motifos[idy][1][idx])
+            for idx in range(len(motifns)):
+                motif_name = motifns[idx].upper()
+                # Genes are only in the dictionary if their expression is above
+                # the given threshold. Add them to the filtered lists if they are
+                # expressed.
 
-        # Output filtered motifs
-        tup = (f_motifns, f_motifos, f_motifes, oi, line)
-        update_vcf(tup, output_f, options)
+                if motif_name in gene_dict:
+                    # Add expression level
+                    f_motifes.append(gene_dict[motif_name])
+                    # Add name and other data
+                    f_motifns.append(motifns[idx])
+                    for idy in range(len(motifos)):
+                        f_motifos[idy][1].append(motifos[idy][1][idx])
 
-        current_var = get_next_var(vcf)
+            # Output filtered motifs
+            tup = (f_motifns, f_motifos, f_motifes, oi, line)
+            print_record(tup, output_f, options)
 
-output_f.close()
+            current_var = get_next_var(vcf)
+
+    output_f.close()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(usage=__doc__)
+
+    parser.add_argument("-i", "--input", dest="input_file", required=True)
+    parser.add_argument("-e", "--expression", dest="exp_file", required=True)
+    parser.add_argument("-o", "--output", dest="output_file", required=True)
+    parser.add_argument("-th", "--threshold", dest="threshold",
+                        required=False, default=5)
+    parser.add_argument("-fe", "--filter", action="store_true", required=False)
+
+    args = parser.parse_args()
+
+    # Easier to use argument variables
+    inp_file = args.input_file
+    exp_file = args.exp_file
+    out_file = args.output_file
+    th = float(args.threshold)
+    filt = arg.filter
+
+    main(inp_file, exp_file, out_file, th, filt)

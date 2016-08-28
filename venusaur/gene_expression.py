@@ -17,6 +17,8 @@ Args:
     (optional) -th <int> = If given, will exclude genes that are below this threshold for all 
         samples in the expression file. Good for excluding genes that aren't expressed.
 """
+import sys
+import argparse
 
 # Vcf class is used to manage input / output of individual vcfs.
 # Fields:
@@ -421,9 +423,6 @@ def main(inp_file, gene_file, wing_size, output, no_overlap=False, thresh=0):
 
 
 if __name__ == '__main__':
-    import sys
-    import argparse
-
     parser = argparse.ArgumentParser(usage=__doc__)
     # Create arguments and options
     parser.add_argument("-i", "--input", dest="input_file", required=True)
