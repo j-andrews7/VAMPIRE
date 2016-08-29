@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """
-For a given motif annotated vcf file (already run through motifs.py),
-remove all motif matches for TFs that are not expressed in at least one sample above the threshold.
+For a given motif annotated vcf file (already run through motifs.py) and a gene expression file, 
+remove all motif matches for TFs that are not expressed in at least one sample above the 
+specified threshold.
     
-Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.txt> [OPTIONS]
+Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTIONS]
 
 Args:
     -i (required) <input.vcf>: Name of sorted variant file to process. 
@@ -96,19 +97,21 @@ def process_line(line, output_f, gene_dict, thresh):
     info_fields = line_list[7].split(";")
     (motifns, motif_other, other_info) = ([], {}, [])
 
+    motif_present = False  # Skip line if no motif was matched.
+
     for field in info_fields:
         if field.startswith("MOTIFN="):
+            motifn_present = True  
             motifns = field[7:].split(',')
-            # TODO - Check how lines with no motif matches are handled. Is MOTIFN still present? 
-            # If not, skip line.
 
             # Get motifs that pass expression threshold.
-            passed_idx, failed_idx = filter_motifs(motifns, gene_dict, thresh)  
+            passed_idx, failed_idx = filter_motifs(motifns, gene_dict, thresh)
+
+            # Delete by high index first so that lower indices aren't changed.  
             for i in sorted(failed_idx, reverse=True):
                 del motifns[i]
+
         # Create dict from other motif fields.
-        # TODO - Check if there is ALWAYS an entry for the 'motif_other' fields
-        # corresponding to the indices in the 'failed_idx' list.
         elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=") or
               field.startswith("MOTIFC=")):
             name = field[:7]
@@ -121,6 +124,9 @@ def process_line(line, output_f, gene_dict, thresh):
             motif_other[name] = values
         else:
             other_info.append(field)
+
+    if motif_present = False:  # Just go to next line if motif info isn't present.
+        return
 
     new_info_fields = "MOTIFN=" + ",".join(motifns)
 
@@ -207,6 +213,7 @@ def main(inp_file, exp_file, out_file, th=5):
         samples = parse_header(line)
         print(line, file=output_f)
 
+        print("Creating gene dictionary for expression data.")
         gene_dict = get_genes(exp_file, sample_names, th)
 
         if len(gene_dict) == 0:
@@ -215,11 +222,13 @@ def main(inp_file, exp_file, out_file, th=5):
                 " has values in the range that you expect.")
             sys.exit()
 
+        print("Filtering motif info for TFs that don't meet the expression threshold of ",
+            + str(th) + ".")
         for line in vcf:
-            current_var = process_line(line, filt, output_f)
+            process_line(line, filt, output_f)
 
     output_f.close()
-
+    print("COMPLETE.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)
@@ -228,14 +237,13 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--expression", dest="exp_file", required=True)
     parser.add_argument("-o", "--output", dest="output_file", required=True)
     parser.add_argument("-th", "--threshold", dest="threshold",
-                        required=False, default=5)
+                        required=False, default=5, type=float)
 
     args = parser.parse_args()
 
-    # Easier to use argument variables
     inp_file = args.input_file
     exp_file = args.exp_file
     out_file = args.output_file
-    th = float(args.threshold)
+    th = args.threshold
 
     main(inp_file, exp_file, out_file, th)
