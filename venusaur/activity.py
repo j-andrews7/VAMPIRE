@@ -1,21 +1,21 @@
 #!/usr/bin/env python
 """
-For a given motif annotated vcf file (already run through motifs.py), remove all motif matches for 
-TFs that are not expressed in at least one sample above the specified threshold.
+For a given motif annotated vcf file (already run through motifs.py), remove all 
+motif matches for TFs that are not expressed in at least one sample above the 
+specified threshold.
     
 Usage: activity.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTIONS]
 
 Args:
-    -i (required) <input.vcf>: Name of sorted variant file to process. 
+    -i (required) <input.vcf>: Name of sorted variant file to process.
     -o (required) <output.vcf>: Name of output file to be created.
     -e (required) <expression.bed>: An expression 'bed' file.
-    -th (optional) <5>: TFs are considered expressed if they are above this threshold. 
+    -th (optional) <5>: TFs are considered expressed if they are above this 
+        threshold.
 """
-# TODO - Write doc string, usage statement, etc. Clean up old comments, debug statements, etc.
-
-import sys
 import argparse
 from statistics import mean, stdev
+
 
 class Position:
     """
@@ -32,24 +32,23 @@ class Position:
         self.start = start_pos
         self.end = end_pos
 
-
     def overlaps(self, pos_b):
         """
         Return whether self overlaps Position pos_b.
 
         Args: pos_b = (Position object) another position
 
-        Returns: 
+        Returns:
             (bool): True if self overlaps with Position pos_b. False if not.
         """
-        if pos_b == None:
+        if pos_b is None:
             return False
 
         if self.chrom != pos_b.chr:
             return False
 
         start_max = max(self.start, pos_b.start)
-        end_min = min(self.end,   pos_b.end)
+        end_min = min(self.end, pos_b.end)
 
         return start_max <= end_min
 
@@ -88,7 +87,8 @@ def output_activity(open_file, enh_pos, enh_id, matches, ref_l, var_l, options):
     if len(matches) < options.filter_bed_num:
         return
 
-    line = enh_pos.chrom + '\t' + str(enh_pos.start) + '\t' + str(enh_pos.end) + '\t' + enh_id
+    line = enh_pos.chrom + '\t' + \
+        str(enh_pos.start) + '\t' + str(enh_pos.end) + '\t' + enh_id
     # print number of samples affected
     if len(matches) > 0:
         line += "\tsig_diff=" + str(len(matches)) + ",have_var=" + str(var_l)
@@ -109,12 +109,12 @@ def output_activity(open_file, enh_pos, enh_id, matches, ref_l, var_l, options):
             # Cut off last ';'
             out_str = out_str[:-1]
 
-        line += '\tsample=' + name + ",var=" + str(pos) + ",z=" + str(round(zscore, 3)) + "--" + out_str
+        line += '\tsample=' + name + ",var=" + \
+            str(pos) + ",z=" + str(round(zscore, 3)) + "--" + out_str
 
     print(line, file=open_file)
 
 
-####-PARSER-####
 parser = argparse.ArgumentParser(usage=__doc__)
 
 parser.add_argument("-a", "--activity", dest="activity_file", required=True)
@@ -123,21 +123,20 @@ parser.add_argument("-i", "--input", dest="input_file", required=True)
 parser.add_argument("-th", "--threshold", dest="threshold",
                     required=False, default=0)
 parser.add_argument("-fan", "--filter_a_n", dest="filter_a_n",
-                    required=False, default=0)         
-        # Only print activity if it affects more samples than this number
-        # default is -1 so a region with any number of samples affected
-        # (having z-scores above threshold) will be output.
+                    required=False, default=0)
+# Only print activity if it affects more samples than this number
+# default is -1 so a region with any number of samples affected
+# (having z-scores above threshold) will be output.
 parser.add_argument("-eo", "--errout", dest="err_out",
                     required=False, default=None)
-parser.add_argument("-fa", "--filter_a", action="count", required=False)          
-        # Should lines in the activity (bed) output file be excluded
-        # if they don't match a motif?
-        # -fa sets this to True
-parser.add_argument("-fv", "--filter_vcfs", action="count", required=False)         
-        # Should lines in the vcf output files be excluded
-        # if they don't have activity?
-        # -fv tag sets this to True
-
+parser.add_argument("-fa", "--filter_a", action="count", required=False)
+# Should lines in the activity (bed) output file be excluded
+# if they don't match a motif?
+# -fa sets this to True
+parser.add_argument("-fv", "--filter_vcfs", action="count", required=False)
+# Should lines in the vcf output files be excluded
+# if they don't have activity?
+# -fv tag sets this to True
 
 args = parser.parse_args()
 
@@ -148,10 +147,8 @@ err_file = args.err_out
 inp_file = args.input_file
 th = float(args.threshold)
 
-options = Options_list()
-options.filter_bed_num = int(args.filter_a_n)
-options.filter_bed = (args.filter_a != None)
-options.filter_vcf = (args.filter_vcfs != None)
-
+filter_bed_num = int(args.filter_a_n)
+filter_bed = (args.filter_a is not None)
+filter_vcf = (args.filter_vcfs is not None)
 
 print("Done")

@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 """
-For a given motif annotated vcf file (already run through motifs.py) and a gene expression file, 
-remove all motif matches for TFs that are not expressed in at least one sample above the 
-specified threshold.
+For a given motif annotated vcf file (already run through motifs.py) and a gene 
+expression file, remove all motif matches for TFs that are not expressed in at 
+least one sample above the specified threshold.
     
-Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTIONS]
+Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> 
+    [OPTIONS]
 
 Args:
     -i (required) <input.vcf>: Name of sorted variant file to process. 
     -o (required) <output.vcf>: Name of output file to be created.
     -e (required) <expression.bed>: An expression 'bed' file.
-    -th (optional) <5>: TFs are considered expressed if they are above this threshold. 
+    -th (optional) <5>: TFs are considered expressed if they are above this 
+        threshold. 
 """
 import sys
 import argparse
@@ -41,12 +43,15 @@ def parse_header(line):
 
 def filter_motifs(motifs, gene_dict, thresh):
     """
-    Get lists of motifs above threshold and below for a list of motif names & the gene dict.
+    Get lists of motifs above threshold and below for a list of motif names & 
+    the gene dict.
 
     Args:
         motifs (list): Motif names for a given variant.
-        gene_dict (dict): Dictionary containing gene names and expression values.
-        thresh (float): Expression threshold that TFs must meet to be included in output.
+        gene_dict (dict): Dictionary containing gene names and expression 
+            values.
+        thresh (float): Expression threshold that TFs must meet to be included 
+            in output.
 
     Returns:
         passed (list): List of motif indices that pass threshold.
@@ -88,9 +93,10 @@ def process_line(line, output_f, gene_dict, thresh):
     Args: 
         line (str): Line to parse.
         output_f (file object): Output file. 
-        gene_dict (dict): Dict with gene names as keys and expression values for samples in vcf as
-            values.
-        thresh (float): Expression threshold that TFs must meet to be included in output.
+        gene_dict (dict): Dict with gene names as keys and expression values for
+            samples in vcf as values.
+        thresh (float): Expression threshold that TFs must meet to be included 
+            in output.
     """
     line = line.strip()
     line_list = line.split("\t")
@@ -125,12 +131,13 @@ def process_line(line, output_f, gene_dict, thresh):
         else:
             other_info.append(field)
 
-    if motif_present = False:  # Just go to next line if motif info isn't present.
+    # Just go to next line if motif info isn't present.
+    if motif_present = False:
         return
 
     new_info_fields = "MOTIFN=" + ",".join(motifns)
 
-    # Delete matches for the other motif info fields that didn't pass the threshold.
+    # Delete matches for the motif info fields that didn't pass the threshold.
     for f in motif_other:
         motif_other[f] = vals
         for i in sorted(failed_idx, reverse=True):
@@ -152,16 +159,17 @@ def get_genes(exp_file, samples, threshold):
     """
     Reads in and parses the .bed expression file.
 
-    Args: 
+    Args:
         exp_file (str): Name of expression file.
         samples (list): Names of the samples in the vcf file.
-        threshold (float): Expression threshold to filter lowly/unexpressed genes.
+        threshold (float): Expression threshold to filter lowly/unexpressed 
+            genes.
 
-    Returns: 
-        gene_dict (dict): {gene_name: [expression_vals]}. Only include values for samples in 
-            the vcf.
+    Returns:
+        gene_dict (dict): {gene_name: [expression_vals]}. Only include values 
+            for samples in the vcf.
     """
-    data_cols = []  # Used to hold indices for columns for which to get expression data.
+    data_cols = []  
     gene_dict = {}
 
     with open exp_file as f:
@@ -188,14 +196,16 @@ def get_genes(exp_file, samples, threshold):
 
 def main(inp_file, exp_file, out_file, th=5):
     """
-        For a given motif annotated vcf file (already run through motifs.py), remove all motif 
-        matches for TFs that are not expressed in at least one sample above the threshold.
+        For a given motif annotated vcf file (already run through motifs.py), 
+        remove all motif matches for TFs that are not expressed in at least one 
+        sample above the threshold.
 
         Args:
             -i (str): Name of sorted variant file to process. 
             -o (str): Name of output file to be created.
             -e (str): Name of expression file.
-            -th (float): TFs are considered expressed if they are above this threshold. 
+            -th (float): TFs are considered expressed if they are above this 
+                threshold. 
     """
 
     output_f = open(out_file, "w")
@@ -222,8 +232,8 @@ def main(inp_file, exp_file, out_file, th=5):
                 " has values in the range that you expect.")
             sys.exit()
 
-        print("Filtering motif info for TFs that don't meet the expression threshold of ",
-            + str(th) + ".")
+        print("Filtering motif info for TFs that don't meet the expression ", 
+            "threshold of " + str(th) + ".")
         for line in vcf:
             process_line(line, filt, output_f)
 
