@@ -3,63 +3,51 @@
 For a given vcf file, compare each variant and it's reference sequence to
 a set of motifs to determine if any are significantly altered.
 
-Usage: motifs.py -i <input.vcf> -r <reference.fa> -m <motif.txt> -o <output.vcf> [OPTIONS]
+Usage: 
+    python motifs.py -i <input.vcf> -r <reference.fa> -m <motif.txt>
+        -o <output.vcf> [OPTIONS]
 
 Args:
-  -i (required) <input.vcf> = Name of sorted variant file to process. 
-
-  -r (required) <reference.fa> = Name of reference sequence 
-    file to get surrounding bases from variant. 3 by default.
-
-  -m (required) <motif.txt> = Tab-delimited key file containing
-    a frequency matrix with each row corresponding to a base
-    and each column corresponding to a position.
-
-  -o (required) <output.vcf> = Name of output file to be created.
-
-  -pc (optional) <0.1> = Pseudocounts value to be added to all positions of 
-    the motif frequency matrix before calculating the probability matrix. 
-
-  -th (optional) <0> = Motifs are considered a match if they score above a
-    given threshold. This is the default threshold (used if no threshold is
-    specified by motif file). 
-
-  -ws (optional) <50> = Optional wing size in bp to search for weak homotypic
-    matches, co-binding tfs, and GC content. 
-
-  -bp (optional) <baselines.txt> = A file containing a single line with tab
-    delineated values for baseline probabilities for A, C, G, T (in order).
-    Probabilities should all be positive and should sum to 1. If none is
-    provided then all are assumed to be equally likely.
-
-  -fm (optional flag) = If -fm (filter with motifs) is included, variants
-    that do not match any motif will not be included in the output (-o) file.
-
-  -ci (optional) <ChIP.bed> = A sorted bed-like file containing tab delineated 
-    columns of the form:
-    chr start end TF1;TF2;TF3...
-
-  -co (optional) <chip_out.bed> = Name of output bed file to be created.
-    A new column will be added with motifs that computationally match each
-    peak.
-
-  -fp (optional flag) = If -fp (filter with peaks) is included, ChIP peaks
-    that do not match any motif will not be included in the output (-co).
-
-  -sk (optional flag) = Use if sorted by karyotype.
+    -i (required) <input.vcf>: Name of sorted variant file to process.
+    -r (required) <reference.fa>: Name of reference sequence
+        file to get surrounding bases from variant.
+    -m (required) <motif.txt>: Tab-delimited key file containing a frequency
+        matrix with each row corresponding to a base and each column
+        corresponding to a position (JASPAR format).
+    -o (required) <output.vcf>: Name of output file to be created.
+    -pc (optional) <0.1>: Pseudocounts value to be added to all positions of
+        the motif frequency matrix before calculating the probability matrix.
+    -th (optional) <0>: Motifs are considered a match if they score above a
+        given threshold. This is the default threshold (used if no threshold is
+        specified by motif file).
+    -ws (optional) <50>: Wing size in bp to search for weak homotypic
+        matches, co-binding tfs, and GC content.
+    -bp (optional) <baselines.txt>: A file containing a single line with tab
+        delineated values for baseline probabilities for A, C, G, T (in order).
+        Probabilities should all be positive and should sum to 1. If none is
+        provided then all are assumed to be equally likely.
+    -fm (optional flag): If -fm (filter with motifs) is included, variants
+        that do not match any motif will not be included in the output file.
+    -ci (optional) <ChIP.bed>: A sorted bed-like file containing tab delineated
+        columns of the form:
+        chr start end TF1;TF2;TF3...
+    -co (optional) <chip_out.bed> = Name of output bed file to be created.
+        A new column will be added with motifs that computationally match each
+        peak.
+    -fp (optional flag): If -fp (filter with peaks) is included, ChIP peaks
+        that do not match any motif will not be included in the output (-co).
+    -sk (optional flag): Use if sorted by karyotype.
 """
 
 import sys
 import argparse
-parser = argparse.ArgumentParser(usage=__doc__)
 from math import log2
 from math import ceil
 from math import log10
-
 from pyfaidx import Fasta
 from Bio import motifs
 
-####-Classes-####
+parser = argparse.ArgumentParser(usage=__doc__)
 
 
 class Options_list:
@@ -177,13 +165,13 @@ def get_reverse_complement(sequence):
 
 
 def sf_str(x, n):
-    """ 
+    """
     Rounds x to a certain number of significant figures.
     Returns the output as a string
         Ex:
         round(0.01234567, 3) -> 0.0123
         round(234.5678, 4) -> 234.6
-        round(1234.56, 2) -> 1200 
+        round(1234.56, 2) -> 1200
 
     Args:
         x = float to be rounded
@@ -206,7 +194,7 @@ def get_baseline_probs(baseline_f):
 
     Returns:
         Array with probabilities as a float array of the form:
-        [ PrA, PrC, PrT, PrG ]  
+        [ PrA, PrC, PrT, PrG ]
     """
 
     # Default baseline probability numbers (assumes all are equally likely)

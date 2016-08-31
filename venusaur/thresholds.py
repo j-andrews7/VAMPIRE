@@ -2,31 +2,24 @@
 """
 Calculate motif thresholds for a given motif file and print to a new file.
 
-Usage:
-    utils.py -m <motifs.txt> -o <output.txt>
+Usage: thresholds.py -m <motifs.txt> -o <output.txt> [OPTIONS]
 
 Args:
     -m (required) = Input filename of a file containing PWMs.
     -o (required) = Output filename.
-    -bp (optional) <baselines.txt> = A file containing a single line with tab
-        delineated values for baseline probabilities for A, C, G, T (in order).
-        Probabilities should all be positive and should sum to 1. If not
+    -bp (optional) <baselines.txt> = A file containing a single line with tab delineated values for baseline
+        probabilities for A, C, G, T (in order). Probabilities should all be positive and should sum to 1. If not
         provided then all are assumed to be equally likely (all are 0.25).
-    -pc (optional) <0.1> = Pseudocounts value to be added to all positions of 
-        the motif frequency matrix before calculating the probability matrix. 
-    -th (optional) <0.0> = Default threshold value. This is used if the 
-        calculated threshold is lower.
-        Ex: default_th = 0.0, biopython calculates threshold needed for
-        a given false positive rate is -1.23, threshold printed will be
-        0.0.
-    -fpr (optional) <0.05> = Acceptable false positive rate for defining 
-        thresholds for each motif. 
-    -pe (optional) <4> = Precision exponent used by for threshhold calculations. 
-        Making this greater than 5 may result in extremely slow run times. Using 
-        a lower number will result in faster (but potentially innacurate) 
-        calculations.
-    -ow (optional flag) = OverWrite: If present, thresholds already present in
-        the input file will be replaced in the output file.
+    -pc (optional) <0.1> = Pseudocounts value to be added to all positions of the motif frequency matrix before
+        calculating the probability matrix.
+    -th (optional) <0.0> = Default threshold value. This is used if the calculated threshold is lower.
+        Ex: default_th = 0.0, biopython calculates threshold needed for a given false positive rate is -1.23, threshold
+        printed will be 0.0.
+    -fpr (optional) <0.05> = Acceptable false positive rate for defining thresholds for each motif.
+    -pe (optional) <4> = Precision exponent used for threshhold calculations. Making this greater than 5 may result in
+        extremely slow run times. Using a lower number will result in faster (but potentially innacurate) calculations.
+    -ow (optional flag) = OverWrite: If present, thresholds already present in the input file will be replaced in the
+        output file.
 """
 from Bio import motifs
 import sys
@@ -40,14 +33,13 @@ def get_baseline_probs(baseline_f):
 
     Args:
         baseline_f (str): Name of file containing a probability array of the form:
-            [ PrA PrC PrT PrG ]
-            Where PrA + PrC + PrT + PrG = 1 (and all are positive and non-zero)
+                [ PrA PrC PrT PrG ] where PrA + PrC + PrT + PrG = 1 (and all are positive and non-zero).
 
     Returns:
-        bp_array (list): List of the probabilities for each base: [ PrA, PrC, PrT, PrG ] 
+        bp_array (list): List of the probabilities for each base: [ PrA, PrC, PrT, PrG ]
     """
 
-    # Default baseline probability numbers (assumes all are equally likely)
+    # Default baseline probability numbers (assumes all are equally likely).
     bp_array = [0.25, 0.25, 0.25, 0.25]
 
     with open(baseline_f) as f:
@@ -62,15 +54,17 @@ def get_baseline_probs(baseline_f):
                         bp_array[idx] = float(line[idx])
                     return bp_array
         except ValueError:
-            print("**ERROR** Baseline probability file incorrectly formatted.\n" +
-                  "File should contain only [ PrA PrC PrT PrG ] \n" +
-                  "Where PrA + PrC + PrT + PrG = 1 (and all are positive and non-zero)\n" +
+            print("**ERROR** Baseline probability file incorrectly formatted.",
+                  "\nFile should contain only [ PrA PrC PrT PrG ]\n",
+                  "Where PrA + PrC + PrT + PrG = 1 (and all are positive and",
+                  "non-zero)\n",
                   "Continuing with:")
             return bp_array
 
-        print("**ERROR** Empty baseline probability file found.\n" +
-              "File should contain only [ PrA PrC PrT PrG ] \n" +
-              "Where PrA + PrC + PrT + PrG = 1 (and all are positive and non-zero)\n" +
+        print("**ERROR** Empty baseline probability file found.\n",
+              "File should contain only [ PrA PrC PrT PrG ]\n",
+              "Where PrA + PrC + PrT + PrG = 1 (and all are positive and",
+              "non-zero)\n",
               "Continuing with:")
         return bp_array
 
@@ -82,18 +76,17 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
     Args:
         input_f (str): Name of file containing frequency matrices for each motif.
         output (str): Name of output file.
-        default_th (float): Default threshold value. This is used if the calculated
-            threshold is lower than this value. This value may be None.
+        default_th (float): Default threshold value. This is used if the calculated threshold is lower than this value.
+            This value may be None.
             Ex: default_th = 0.0, biopython calculates threshold needed for
-            a given false positive rate is -1.23, threshold printed will be 0.0.
-        overwrite (bool): Determines if thresholds already written in the file should be replaced.
-        thresholds_list (list): List of thresholds calculated by biopython.
+            a given false positive rate = -1.23, threshold printed will be 0.0.
+        overwrite (bool): True if thresholds already in the file should be replaced.
+        thresholds_list (list): List of thresholds (floats) calculated by biopython.
     """
 
     output_f = open(output, "w")
     idx = 0
 
-    # Open provided motif file
     with open(input_f) as f:
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
@@ -106,7 +99,6 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
         pfm = ["", "", "", ""]
         given_thresh = None
 
-        # Iterate through file line by line.
         for line in f:
 
             # First line contains id and name
@@ -124,9 +116,10 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
 
             # Output motif and continue (there are 2 newlines between motifs)
             else:
-                if not overwrite and given_thresh != None:
+                if not overwrite and given_thresh is not None:
                     th = given_thresh
-                elif default_th != None and default_th > thresholds_list[idx]:
+                elif (default_th is not None and
+                      default_th > thresholds_list[idx]):
                     th = default_th
                 else:
                     th = thresholds_list[idx]
@@ -141,9 +134,9 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
             i += 1
 
     if i >= 5:
-        if not overwrite and given_thresh != None:
+        if not overwrite and given_thresh is not None:
             th = given_thresh
-        elif default_th != None and default_th > thresholds_list[idx]:
+        elif default_th is not None and default_th > thresholds_list[idx]:
             th = default_th
         else:
             th = thresholds_list[idx]
@@ -155,37 +148,32 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
     output_f.close()
     return
 
-
-# Create arguments and options
+# TODO - Main statement, etc.
 parser.add_argument("-m", "--motif", dest="motif_file", required=True)
 parser.add_argument("-o", "--outfile", dest="motif_outfile", required=True)
 parser.add_argument("-bp", "--baseline", dest="baseline_file", required=False, default=None)
-parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
-                    required=False, default=0.1, type=float)
+parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts", required=False, default=0.1, type=float)
 parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=None)
-parser.add_argument("-fpr", "--falsepos", dest="false_pos_rate",
-                    required=False, default=0.05, type=float)
+parser.add_argument("-fpr", "--falsepos", dest="false_pos_rate", required=False, default=0.05, type=float)
 parser.add_argument("-pe", "--precision", dest="precision_exp", required=False, default=4, type=int)
 parser.add_argument("-ow", "--overwrite", action="store_true", required=False)
 
-# Parse arguments and options
 args = parser.parse_args()
 
-if (args.baseline_file == None):
+if args.baseline_file is not None:
     bp = [0.25, 0.25, 0.25, 0.25]
 else:
     bp = get_baseline_probs(args.baseline_file)
 pc = args.pseudocounts
-if args.threshold != None:
+if args.threshold is not None:
     d_th = float(args.threshold)
 else:
     d_th = None
-ow = (args.overwrite != None)
+ow = args.overwrite is not None
 fpr = float(args.false_pos_rate)
 pe = int(args.precision_exp)
 if pe > 5:
-    print("Warning: high precision exponent (-pe) may cause drastic slowing " +
-          "or memory errors")
+    print("Warning: high precision exponent (-pe) may cause drastic slowing " + "or memory errors")
 if pe <= 0:
     pe = 1
     print("Precision exponent (-pe) too low, set to " + str(pe))
@@ -219,7 +207,6 @@ for m in motifs.parse(fh, "jaspar"):
 print("Total motifs read: " + str(len(thresholds)))
 
 print("Outputing thresholds")
-# Output calculated motifs
 output_motifs(args.motif_file, args.motif_outfile, d_th, ow, thresholds)
 
-print("Done")
+print("Done.")
