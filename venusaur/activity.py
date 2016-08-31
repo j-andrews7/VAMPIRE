@@ -13,16 +13,19 @@ Args:
     -ov (str): Path to VCF output file to be created.
     -ob (str): Path to loci output file to be created.
     -th (float, optional): Z-score magnitutde threshold that must be met for variants/loci to be reported to output.
-    -thresh (float, optional): Z-score magnitude that must be met for variants/loci to be reported to output.
-        filter_num (int, optional): Set number of samples that must meet z-score threshold for locus to be reported to
-            bed output file. So this number of samples must have the variant and be significantly affected by it.
-        include_bed (bool, optional):
+        Default is 0, so all loci a variant overlaps will be reported.
+    -fan (int, optional): Set number of samples that must meet z-score threshold for a locus to be reported to
+        bed output file. So this number of samples must have the variant and have the locus's activity be significantly
+        affected by it. Default is 0, so a locus will be reported if its activity is altered in even one sample above
+        the z-score threshold.
+    -ib (bool, optional): Should loci that don't contain any variants that significantly affect their activity
+        be included in the bed output? False by default, set to True if wanted.
+    -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
+        vcf output? False by default, set to True if wanted.
 """
 import argparse
+import time
 from statistics import mean, stdev
-
-# TODO - Option to retain variants that lie outside these loci in VCF output.
-# TODO - Option to retain loci that don't contain a variant in loci output.
 
 
 class Position:
@@ -39,24 +42,6 @@ class Position:
         self.chrom = chrom
         self.start = start_pos
         self.end = end_pos
-
-    def is_before(self, pos_b):
-        """
-        Returns true if self comes before Position pos_b without overlapping.
-
-        Args:
-            pos_b (Position): Another Position.
-
-        Returns:
-            bool: True if self overlaps with Position pos_b. False if not.
-        """
-        if pos_b is None:
-            return True
-
-        if self.chr == pos_b.chr:
-            return self.end < pos_b.start
-
-        return self.chr < pos_b.chr
 
     def overlaps(self, pos_b):
         """
@@ -87,14 +72,16 @@ class Variant:
     """
 
     def __init__(self, line):
-        line_list = line.strip().split("\t")
+        self.line_list = line.strip().split("\t")
         self.pos = Position(line_list[0], int(line_list[1]), len(line_list[3]))
         self.orig_line = line.strip()
-        self.info_fields = line_list[7].split(";")
+        self.info_fields = self.line_list[7].split(";")
         self.samples, self.motif_fields = self.parse_info_fields()
 
-        if self.samples is not None:
+        if self.samples is not None:  # Should never evaluate to False.
             self.num_samps = len(self.samples)
+        else:
+            self.num_samps = 0
 
     def parse_info_fields(self):
         """
@@ -146,17 +133,19 @@ class Locus:
         self.num_var = len(var_ind)
         ref_scores = []
         var_scores = []
+        z_scores = []
 
         if len(num_ref) > 1:  # If all samples (or all but 1) have the variant, can't calc z-score. Just return 'NA'.
             for entry in ref_ind:
                 ref_scores.append(data[int(entry)])
             for entry in var_ind:
-                vat_scores.append(data[int(entry)])
+                var_scores.append(data[int(entry)])
 
             ref_mean = mean(ref_scores)
             ref_std = stdev(ref_scores)
 
             if ref_std != 0:  # If only one sample has ref, will have no variance.
+                return "NA"
 
 
 
@@ -169,14 +158,16 @@ def get_activity_samples(header_line):
         header_line (str): Header line from activity file.
 
     Returns:
-        act_samples (dict): Dictionary of {sample_name (str): data_col_index (int)}.
+        act_samples (dict): Dictionary of {sample_name (str): sample_data_index (int)}.
+            sample_data_index is index for data in sample list, not the line as a whole.
+            e.g.: [samp1, samp2, samp3] & [20, 10, 5] for data values, then {'samp1': 0}.
     """
     line_list = header_line.strip().split("\t")
     samples = line_list[4:]
     act_samples = {}
 
     for item in samples:
-        samp_idx = line_list.index(item)
+        samp_idx = samples.index(item)
         sample = item.split(".")[0]
         act_samples[sample] = samp_idx
 
@@ -254,23 +245,6 @@ def parse_activity_file(activity_file):
         return (act_samples, act_data)
 
 
-def process_variant(line, act_samples, act_data, act_vars):
-    """
-    Process a variant record and print to output.
-
-    Determine if the variant lies within one of the loci from the activity
-    file, and if so, calculate a z-score for samples with the variant vs.
-    those without it using the activity data. Print the variant to the
-    output VCF file with the loci IDs and z-scores as new INFO fields.
-
-    Args:
-        line (str): Variant record to process from the input VCF file.
-        act_samples (dict): Dict of {sample_name: index for activity vals}.
-        act_data (dict): Dict of {(record Position, record iden): activity vals for record}.
-        act_vars (dict): Dict of {(record Position, record iden): (Variants)}
-    """
-
-
 def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False):
     """
     Compare activity of loci for samples harboring a variant without them and those that do not.
@@ -293,7 +267,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie in
             a Locus and significantly affect its activity.
     """
-
+    print("Parsing activity data file.")
     act_samps, act_data = parse_activity_file(act_file)
 
     output_vcf = open(out_vcf, "w")
@@ -301,11 +275,12 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
     with open(vcf_file) as f:
 
-        line = vcf.readline()
-
+        # Add new INFO lines.
+        line = f.readline().strip()
+        now = time.strftime("%c")
         info_needed = True
         # TODO - Refactor this so output isn't such an enormous mess. One info field, multiple sub-fields per motif.
-        info = '##INFO=<ID=LOCIID,Number=.,Type=String,Description="IDs for loci that variant overlaps.">'
+        info = '##INFO=<ID=LOCIID,Number=.,Type=String,Description="IDs for loci that variant overlaps.">\n'
         info += '##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples containing the variant.">\n'
         info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.',
                  ' Calculated for each sample containing the variant for each loci.">\n')
@@ -314,7 +289,57 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant',
                  ' and having loci data.">\n')
         info += ('##INFO=<ID=SAMPSNR,Number=1,Type=Integer,Description="Number of samples containing reference',
-                 ' and having loci data.">\n')
+                 ' and having loci data.">')
+        command = ('##venusaur=<ID=activity,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+                   ' --activity ' + act_file + ' --outputvcf ' + out_vcf + ' --outputbed ' + out_bed +
+                   ' --threshold ' + str(thresh) + ' --filter_act_num ' + str(filter_num) + ' --include_bed ' +
+                   include_bed + ' --include_vcf ' + include_vcf + '">')
+
+        # Print new info lines at the top of the ##INFO section.
+        while line.startswith("##"):
+            if info_needed and line.startswith("##INFO"):
+                print(info, file=output_vcf)
+                print(command, file=output_vcf)
+                print(command, file=output_bed)
+                info_needed = False
+            print(line, file=output_vcf)
+            line = f.readline().strip()
+
+        vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
+
+        print("Comparing samples in VCF file and activity file to find commonalities.\n")
+        print("VCF samples: ", *vcf_samples, sep="\n")
+        print("Activity samples: ", *list(act_samps.keys()), sep="\n")
+
+        common_samps, valid_act_samps = compare_samples(act_samples, vcf_samples)  # Get common samples b/twn the two.
+        print("Common samples: ", *common_samps, sep="\n")
+        print("Processing variants. This may take some time.")
+        # TODO - Progress bar might actually be a decent addition.
+
+        for line in f:
+            current_var = Variant(line)
+            loci_ovlp_var = []
+
+            for item in act_data:
+                if current_var.pos.chrom == item.pos.chrom and current_var.pos.start > item.pos.end:
+                    break
+                elif current_var.pos.chrom != item.pos.chrom:
+                    continue
+                elif current_var.pos.overlaps(item.pos):
+                    loci_ovlp_var.append(item)
+
+            # If variant overlaps no loci, print to output only if include_vcf option used.
+            if not loci_ovlp_var:
+                if include_vcf:
+                    print(line, file=output_vcf)
+                else:
+                    continue
+
+            # Get activity data indices for both samples with variant and without.
+            var_act_samples = [valid_act_samps[x] for x in current_var.samples if x in valid_act_samps]
+            ref_act_samples = [valid_act_samps[x] for x in valid_act_samps if x not in current_var.samples]
+
+
 
 
 
@@ -326,7 +351,7 @@ if __name__ == '__main__':
     parser.add_argument("-ov", "--outputvcf", dest="output_vcf", required=True)
     parser.add_argument("-ob", "--outputbed", dest="output_bed", required=True)
     parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=0)
-    parser.add_argument("-fan", "--filter_a_n", dest="filter_a_n", required=False, default=0)
+    parser.add_argument("-fan", "--filter_act_num", dest="filter_a_n", required=False, default=0)
     # Only print activity if it affects more samples than this number
     # default is -1 so a region with any number of samples affected
     # (having z-scores above threshold) will be output.
@@ -340,13 +365,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Easier to use argument variables
+    inp_file = args.input_file
     act_file = args.activity_file
     vcf_out = args.output_vcf
     bed_out = args.output_bed
-    inp_file = args.input_file
     th = float(args.threshold)
 
     filter_bed_num = int(args.filter_a_n)
     include_bed = args.include_bed
     include_vcf = args.include_vcf
-    main()
+    main(inp_file, act_file, vcf_out, bed_out, th, filter_bed_num, include_bed, include_vcf
