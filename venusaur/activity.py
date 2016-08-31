@@ -309,10 +309,12 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         info += '##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples containing the variant.">\n'
         info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.',
                  ' Calculated for each sample containing the variant for each loci.">\n')
-        info += ('##INFO=<ID=MEETTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets',
+        info += ('##INFO=<ID=SAMPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets',
                  ' the z-score magnitude threshold.">\n')
-        info += '##INFO=<ID=SAMPSN,Number=.,Type=Integer,Description="Number of samples containing variant.">\n'
-        info += '##INFO=<ID=SAMPSR,Number=.,Type=Integer,Description="Number of samples containing reference.">\n'
+        info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant',
+                 ' and having loci data.">\n')
+        info += ('##INFO=<ID=SAMPSNR,Number=1,Type=Integer,Description="Number of samples containing reference',
+                 ' and having loci data.">\n')
 
 
 
