@@ -1,45 +1,46 @@
 """
-Driven is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions.
+VENUSAUR is a set of tools to identify and prioritize variants that alter TF binding, affect gene 
+expression, and change regulatory element activity.
 """
 from setuptools import find_packages, setup
 
-dependencies = ['click','pyfaidx']
+dependencies = ['click>=6', 'pyfaidx', 'scipy', 'biopython']
 
 setup(
-    name='driven',
+    name='venusaur',
     version='0.1.0',
-    url='https://github.com/j-andrews7/DRIVEN',
+    url='https://github.com/j-andrews7/VENUSAUR',
     license='MIT',
-    author='Jared Andrews',
+    author='Payton Lab',
     author_email='jared.andrews07@gmail.com',
-    description='Driven is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make reasonable and interesting biological conclusions.',
+    description='VENUSAUR is a set of tools to identify and prioritize variants that alter TF binding, affect gene expression, and change regulatory element activity',
     long_description=__doc__,
     packages=find_packages(exclude=['tests']),
     include_package_data=True,
     zip_safe=False,
     platforms='any',
     install_requires=dependencies,
+    keywords='variant genomics biology bioinformatics epigenetic chromatin transcription motif research',
     entry_points={
         'console_scripts': [
-            'driven = driven.cli:main',
+            'venusaur = venusaur.venusaur:cli',
         ],
     },
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'Development Status :: 1 - Planning',
-        # 'Development Status :: 2 - Pre-Alpha',
+        # 'Development Status :: 1 - Planning',
+        'Development Status :: 2 - Pre-Alpha',
         # 'Development Status :: 3 - Alpha',
         # 'Development Status :: 4 - Beta',
         # 'Development Status :: 5 - Production/Stable',
         # 'Development Status :: 6 - Mature',
         # 'Development Status :: 7 - Inactive',
         'Environment :: Console',
-        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
-        'Operating System :: POSIX',
         'Operating System :: MacOS',
         'Operating System :: Unix',
-        'Operating System :: Windows',
+        'Operating System :: Microsoft :: Windows',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
