@@ -71,22 +71,26 @@ class Variant(object):
     Use to process and handle variant records from a VCF more easily. Create from line of VCF file.
     """
 
-    def __init__(self, line):
+    def __init__(self, line, all_sample_names):
         self.line_list = line.strip().split("\t")
         self.pos = Position(self.line_list[0], int(self.line_list[1]), len(self.line_list[3]))
+        self.ref_allele = self.line_list[3]
+        self.var_allele = self.line_list[4]
+        self.iden = self.line_list[2]
         self.orig_line = line.strip()
         self.info_fields = self.line_list[7].split(";")
-        self.samples, self.motif_fields = self.parse_info_fields()
+        self.var_samples, self.motif_fields = self.parse_info_fields()
+        self.ref_samples = [x for x in all_sample_names if x not in self.var_samples]
         self.loci = []
 
-        if self.samples is not None:  # Should never evaluate to False.
+        if self.var_samples is not None:  # Should never evaluate to False.
             self.num_var_samps = len(self.samples)
         else:
             self.num_var_samps = 0
 
     def parse_info_fields(self):
         """
-        Get sample names and motif INFO fields from a variant record's INFO fields.
+        Get names of samples containing variant and motif INFO fields from a variant record's INFO fields.
 
         Args:
             self (Variant): Variant object.
@@ -116,8 +120,39 @@ class Variant(object):
         Args:
             include_vcf (bool): True if variants that don't pass the z-score threshold for any Locus should excluded
                 from output. False if they should be included.
-        """
 
+        Returns:
+            output (str): Line for Variant in appropriate VCF format.
+                or
+            None: If include_vcf is True and no Locus that Variant overlaps hits the z-score threshold.
+        """
+        info = self.info_fields
+        info.insert(0, "SAMPSTV=" + ",".join(self.var_samples))
+        info.insert(0, "SAMPSR=" + ",".join([x.ref_samples[self] for x in self.loci[0]]))
+        info.insert(0, "SAMPSV=" + ",".join([x.var_samples[self] for x in self.loci[0]]))
+        info.insert(0, "SAMPSNR=" + ",".join([x.num_valid_ref[self] for x in self.loci[0]]))
+        info.insert(0, "SAMPSNV=" + ",".join([x.num_valid_var[self] for x in self.loci[0]]))
+
+        # Use lists to maintain order in output so that LOCIID, LOCIVZ, SAMPTHN fields can all be matched up.
+        z_scores = []
+        pass_thresh = []
+        loci_idens = []
+        for item in self.loci:
+            loci_idens.append(item.iden)
+            pass_thresh.append(item.num_pass_thresh[self])
+            tmp = "(" + ",".join([x for x in item.z_scores[self]]) + ")"
+            z_scores.append(tmp)
+        info.insert(0, "SAMPTHN=" + ",".join(pass_thresh))
+        info.insert(0, "LOCIVZ=" + ",".join(z_scores))
+        info.insert(0, "LOCIID=" + ",".join(loci_idens))
+
+        if include_vcf and all([x == 0 for x in pass_thresh]):
+            return None
+        else:
+            self.info_fields = info
+            self.line_list[7] = ";".join(self.info_fields)
+            output = "\t".join(self.line_list)
+            return output
 
 
 # TODO - Move into utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
@@ -199,6 +234,72 @@ class Locus(object):
                 vals.append("NA")
                 self.z_scores[variant] = vals
         return
+
+    def get_locus_output(self, include_bed=False, filter_num=0):
+        """
+        Create list of output lines for given Locus object.
+
+        Args:
+            include_bed (bool): True if variants that don't pass the z-score threshold for any Locus should excluded
+                from output. False if they should be included.
+            filter_num (int): Number of samples the must meet z-score threshold for Variant to be included in output.
+
+        Returns:
+            output (list of str): List of lines for Locus in appropriate BED-like format.
+                or
+            None: If include_bed is True and Locus doesn't contain any Variants that hit z-score threshold for any
+                sample.
+        """
+        output = []
+        chrom = self.pos.chrom
+        start = self.pos.start
+        end = self.pos.end
+        iden = self.iden
+
+        # Get info for each Variant that is necessary for output.
+        for item in self.variants:
+            num_meet_thresh = int(self.num_pass_thresh[item])
+            if num_meet_thresh < filter_num and include_bed is False:
+                continue  # Just go to next Variant if required number of samples didn't meet z-score threshold.
+
+            out_line = [chrom, start, end, iden]
+            motifs_out = ";".join(item.motif_fields)
+            out_line.append(item.pos.chrom + ":" + item.pos.start + "_" + item.ref_allele + ">" + item.var_allele)
+            val_var_samps = self.var_samples[item]
+            num_val_var = len(self.var_samples[item])
+            val_ref_samps = ",".join(self.ref_samples[item])
+            num_val_ref = len(self.ref_samples[item])
+            all_var_samps = ",".join(item.var_samples)
+            num_all_var_samps = len(item.var_samples)
+            all_ref_samps = ",".join(item.ref_samples)
+            num_all_ref_samps = len(item.var_samples)
+
+            # Handle z_scores.
+            scores_out = []
+            scores = self.z_scores[item]
+            for x in range(len(val_var_samps)):
+                samp = val_var_samps[x]
+                score = scores[x]
+                scores_out.append(samp + "=" + str(score))
+
+            out_line.append(",".join(scores_out))
+            out_line.append(str(num_meet_thresh))
+            out_line.append(",".join(val_var_samps))
+            out_line.append(str(num_val_var))
+            out_line.append(val_ref_samps)
+            out_line.append(str(num_val_ref))
+            out_line.append(all_var_samps)
+            out_line.append(str(num_all_var_samps))
+            out_line.append(all_ref_samps)
+            out_line.append(str(num_all_ref_samps))
+            out_line.append(motifs_out)
+
+            output.append("\t".join(out_line))
+
+        if output:  # If no variants are in the output list, just return None.
+            return output
+        else:
+            return None
 
 
 def get_activity_samples(header_line):
@@ -323,6 +424,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
     output_vcf = open(out_vcf, "w")
     output_bed = open(out_bed, "w")
 
+    loci_out = []  # Use to hold all Locus objects that overlap a Variant.
+
     with open(vcf_file) as f:
 
         # Add new INFO lines.
@@ -330,15 +433,20 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         now = time.strftime("%c")
         info_needed = True
         # TODO - Refactor this so output isn't such an enormous mess. One info field, multiple sub-fields per motif.
+        # TODO - Add sample names for those that pass threshold.
         info = '##INFO=<ID=LOCIID,Number=.,Type=String,Description="IDs for loci that variant overlaps.">\n'
-        info += '##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples containing the variant.">\n'
-        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.',
+        info += '##INFO=<ID=SAMPSTV,Number=.,Type=String,Description="All samples with the variant allele.">\n'
+        info += ('##INFO=<ID=SAMPSR,Number=.,Type=String,Description="Samples with the reference allele and loci data'
+                 '.">\n')
+        info += ('##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples with the variant allele and loci data.'
+                 '">\n')
+        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.'
                  ' Calculated for each sample containing the variant for each loci.">\n')
-        info += ('##INFO=<ID=SAMPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets',
-                 ' the z-score magnitude threshold.">\n')
-        info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant',
+        info += ('##INFO=<ID=SAMPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets'
+                 'the z-score magnitude threshold.">\n')
+        info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant'
                  ' and having loci data.">\n')
-        info += ('##INFO=<ID=SAMPSNR,Number=1,Type=Integer,Description="Number of samples containing reference',
+        info += ('##INFO=<ID=SAMPSNR,Number=1,Type=Integer,Description="Number of samples containing reference'
                  ' and having loci data.">')
         command = ('##venusaur=<ID=activity,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
                    ' --activity ' + act_file + ' --outputvcf ' + out_vcf + ' --outputbed ' + out_bed +
@@ -367,7 +475,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         # TODO - Progress bar might actually be a decent addition.
 
         for line in f:
-            current_var = Variant(line)
+            current_var = Variant(line, vcf_samples)
             loci_ovlp_var = []
 
             for item in act_data:
@@ -382,6 +490,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             if not loci_ovlp_var:
                 if include_vcf:
                     print(line, file=output_vcf)
+                    continue
                 else:
                     continue
 
@@ -397,16 +506,24 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
                 loc.calc_z_score(ref_act_indices, var_act_indices, current_var, thresh)
                 current_var.loci.append(loc)  # Add Locus object to given Variant.
                 loci_ovlp_var[x] = loc
+                loci_out.append(loc)  # These will be used for eventual BED output.
 
             vcf_out_line = current_var.get_variant_output(include_vcf)
 
             if vcf_out_line is not None:
                 print(vcf_out_line, file=output_vcf)
 
+    print("Filtering loci and creating BED output.")
+    print("CHR", "START", "END", "ID", "VARIANT", "Z_SCORES", "NUM_PASS_THRESH", "COMMON_VAR_SAMPS",
+          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "ALL_REF_SAMPS",
+          "MOTIF_INFO", sep="\t", file=output_bed)
+    for item in loci_out:
+        bed_out_line = item.get_locus_output(include_bed, filter_num)
 
+        if bed_out_line is not None:
+            print(*bed_out_line, sep="\n", file=output_bed)
 
-
-
+    print("Complete.")
 
 
 if __name__ == '__main__':
@@ -423,14 +540,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # Easier to use argument variables
     inp_file = args.input_file
     act_file = args.activity_file
     vcf_out = args.output_vcf
     bed_out = args.output_bed
     th = float(args.threshold)
-
     filter_bed_num = int(args.filter_a_n)
     include_bed = args.include_bed
     include_vcf = args.include_vcf
+
     main(inp_file, act_file, vcf_out, bed_out, th, filter_bed_num, include_bed, include_vcf)
