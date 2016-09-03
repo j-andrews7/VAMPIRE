@@ -41,6 +41,8 @@ def get_baseline_probs(baseline_f):
 
     # Default baseline probability numbers (assumes all are equally likely).
     bp_array = [0.25, 0.25, 0.25, 0.25]
+    if baseline_f is None:
+        return bp_array
 
     with open(baseline_f) as f:
         try:
