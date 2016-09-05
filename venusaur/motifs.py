@@ -263,7 +263,7 @@ def get_motifs(motif_f, pc, default_th, base_pr):
         for line in f:
 
             # remove brackets and split on whitespace
-            line = line.replace('[', '').replace(']', '').strip().split()
+            line = line.strip().strip('[').strip(']').strip().strip('A').strip('C').strip('T').strip('G').split().strip()
 
             # First line contains id and name
             if i == 0:
@@ -277,7 +277,7 @@ def get_motifs(motif_f, pc, default_th, base_pr):
 
             # Order of position weight matrices is A,C,G,T. Remove brackets etc.
             elif i < 5:
-                matrix[i - 1] = line[1:]
+                matrix[i - 1] = line[0:]
                 if len(matrix[i - 1]) > max_length:
                     max_length = len(matrix[i - 1])
 
