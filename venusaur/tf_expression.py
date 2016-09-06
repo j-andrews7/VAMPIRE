@@ -67,7 +67,7 @@ def filter_motifs(motifs, gene_dict, thresh):
 
         # Check if any of the expression values meet the threshold.
         for x in exp_vals:
-            if x >= thresh:
+            if float(x) >= thresh:
                 pass_th = True
                 motif_idx = motifs.index(item)
                 passed.append(motif_idx)
@@ -76,7 +76,7 @@ def filter_motifs(motifs, gene_dict, thresh):
         if pass_th is False:
             motif_idx = motifs.index(item)
             failed.append(motif_idx)
-
+    print("Passed: ", passed, "\nFailed: ", failed)
     return (passed, failed)
 
 
@@ -176,7 +176,7 @@ def get_genes(exp_file, samples, threshold):
             for idx in data_cols:
                 exp_vals.append(line[idx])
 
-            passed_filter = [x for x in exp_vals if x >= threshold]
+            passed_filter = [x for x in exp_vals if float(x) >= threshold]
             if len(passed_filter) > 0:
                 gene_dict[gene_name] = exp_vals
 

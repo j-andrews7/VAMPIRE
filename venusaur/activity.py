@@ -105,7 +105,7 @@ class Variant(object):
             field_info = field.split("=")
             name, data = (field_info[0], field_info[1])
 
-            # TODO - Include method that parses header to determine # samples rather than this lazy method.
+            # TODO - Write method that parses header to determine # samples with variant rather than this lazy method.
             if name is "set":
                 samples = data.split("-")
             elif name.startswith("MOTIF"):

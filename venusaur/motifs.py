@@ -163,25 +163,6 @@ def get_reverse_complement(sequence):
     return rev_comp
 
 
-def sf_str(x, n):
-    """
-    Rounds x to a certain number of significant figures.
-    Returns the output as a string
-        Ex:
-        round(0.01234567, 3) -> 0.0123
-        round(234.5678, 4) -> 234.6
-        round(1234.56, 2) -> 1200
-
-    Args:
-        x = float to be rounded
-        n = number of sig figs
-
-    Returns: a string
-    """
-
-    return str(round(x, int(n - ceil(log10(abs(x))))))
-
-
 def get_baseline_probs(baseline_f):
     """
     Read in baseline probabilities from a file name.
@@ -263,7 +244,7 @@ def get_motifs(motif_f, pc, default_th, base_pr):
         for line in f:
 
             # remove brackets and split on whitespace
-            line = line.strip().strip('[').strip(']').strip().strip('A').strip('C').strip('T').strip('G').split().strip()
+            line = line.strip().strip().strip('A').strip('C').strip('T').strip('G').strip().strip('[').strip(']').split()
 
             # First line contains id and name
             if i == 0:
@@ -456,6 +437,10 @@ def score_motif(p_matrix, baseline_p, sequence):
     """
 
     score = 0
+
+    if len(sequence) < len(p_matrix[0]):
+        print("Sequence shorter than probability matrix. This is a bug. Returning score of 0.")
+        return score
 
     for pos in range(len(p_matrix[0])):
         # Match base
@@ -684,15 +669,15 @@ def update_vcf(line, matches, output_f, options):
             vargc += ","
             refgc += ","
         names += match.name
-        varscores += sf_str(match.var_score, 3)
-        refscores += sf_str(match.ref_score, 3)
+        varscores += str(round(match.var_score, 4))
+        refscores += str(round(match.ref_score, 4))
         # Sequence environment data
         if match.var_gc is not None:
             ht_matches = ""
-            varht += sublist_str(match.var_ht, 3)
-            refht += sublist_str(match.ref_ht, 3)
-            vargc += sf_str(match.var_gc, 3)
-            refgc += sf_str(match.ref_gc, 3)
+            varht += sublist_str(match.var_ht, 4)
+            refht += sublist_str(match.ref_ht, 4)
+            vargc += str(round(match.var_gc, 4))
+            refgc += str(round(match.ref_gc, 4))
         if match.chip_match:
             chips += "Y"
         else:
@@ -744,7 +729,7 @@ def sublist_str(sublist, sig_figs):
         if output != "":
             output += "/"
         # debug output += str(float_item)
-        output += sf_str(float_item, sig_figs)
+        output += str(round(float_item, sig_figs))
     if output != "":
         return "(" + output + ")"
     return ""
@@ -975,8 +960,8 @@ def print_peak(peak, file, options):
     for match in mm_array:
         if motif_string != "":
             motif_string += ";"
-        motif_string += match.name + "," + sf_str(match.var_score, 3) + ","
-        motif_string += sf_str(match.ref_score, 3)
+        motif_string += match.name + "," + str(round(match.var_score, 4)) + ","
+        motif_string += str(round(match.ref_score, 4))
 
     line += chip_string + "\t" + motif_string
     print(line, file=file)
