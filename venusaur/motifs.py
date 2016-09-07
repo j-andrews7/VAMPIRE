@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-For a given vcf file, compare each variant and it's reference sequence to
+For a given vcf file, compare each variant and its reference sequence to
 a set of motifs to determine if any are significantly altered.
 
 Usage:
