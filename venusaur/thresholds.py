@@ -150,7 +150,7 @@ def output_motifs(input_f, output, default_th, overwrite, thresholds_list):
     output_f.close()
     return
 
-# TODO - Main statement, etc.
+# TODO - Main function, etc.
 parser.add_argument("-m", "--motif", dest="motif_file", required=True)
 parser.add_argument("-o", "--outfile", dest="motif_outfile", required=True)
 parser.add_argument("-bp", "--baseline", dest="baseline_file", required=False, default=None)

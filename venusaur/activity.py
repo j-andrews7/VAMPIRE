@@ -28,6 +28,7 @@ import time
 from statistics import mean, stdev
 
 
+# TODO - Move into a utils.py file and import as appropriate.
 class Position(object):
     """
     Use to represent and handle genomic ranges more easily.
@@ -65,7 +66,7 @@ class Position(object):
         return start_max <= end_min
 
 
-# TODO - Move into utils.py file and import as appropriate.
+# TODO - Move into a utils.py file and import as appropriate.
 class Variant(object):
     """
     Use to process and handle variant records from a VCF more easily. Create from line of VCF file.
@@ -155,7 +156,7 @@ class Variant(object):
             return output
 
 
-# TODO - Move into utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
+# TODO - Move into a utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
 class Locus(object):
     """
     Use to process and handle loci records from an activity file more easily.
