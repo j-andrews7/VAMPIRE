@@ -1,9 +1,9 @@
 import click
-import venusaur.thresholds
-import venusaur.motifs
-import venusaur.activity
-import venusaur.tf_expression
-import venusaur.gene_expression
+import venusar.thresholds
+import venusar.motifs
+import venusar.activity
+import venusar.tf_expression
+import venusar.gene_expression
 
 
 @click.command()

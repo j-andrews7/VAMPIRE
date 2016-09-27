@@ -1,41 +1,34 @@
 #!/usr/bin/env python3
 """
-For the specified vcf and expression file, determine which genes are located within a specific range 
+For the specified vcf and expression file, determine which genes are located within a specific range
 from each variant. These are noted and their z-scores determined for samples with vs without the
 variant.
 
-Usage: python3 gene_expression.py -i <input.bed> -e <expression.bed> -o <output.bed> [OPTIONS]
+Usage: python3 gene_expression.py -i <input.vcf> -e <expression.bed> -ov <output.vcf> -ob <output.bed> [OPTIONS]
 
 Args:
-    (required) -i <input.bed> = Name of locus list file to process.
-    (required) -e <expression.bed> = Name of expression file.
-    (required) -o <output.bed> = Name of output file to be created that will be gene-based.
-    (optional) -size <wing size> = An integer to define the distance from the center or edges of the 
+    -i (str) = Name of vcf file to process.
+    -e (str) = Name of expression file.
+    -ov (str) = Name of vcf output file.
+    -ob (str) = Name of bed output file that will be gene-based.
+    -size (int, optional) = An integer to define the distance from the center or edges of the
         loci to look for gene overlap. 50 kb by default.
-    (optional) -noovlp = If including, will not print variants that directly overlap with a gene in 
-        the expression file to output. Good for RE searches.
-    (optional) -th <int> = If given, will exclude genes that are below this threshold for all 
-        samples in the expression file. Good for excluding genes that aren't expressed.
+    -intergenic (bool, optional) = If included, will not print variants that directly overlap with a gene in
+        the expression file to output. Good for regulatory element searches. False by default.
+    -th (int, optional) = If given, will exclude genes that are below this threshold for all
+        samples in the expression file. Good for excluding genes that aren't expressed. 0 by default.
 """
-import sys
+# TODO - This is very incomplete.
 import argparse
 
-# Vcf class is used to manage input / output of individual vcfs.
-# Fields:
-#   name = sample name for given vcf, used for printing
-#   vcf_f = opened vcf file, only used internally
-#   out_f = opened vcf file, only used internally (may be None)
-#   var_pos = Position object
-#   matches = enhancer activity matches
-#   original_line = (string) original info line from vcf
-# May throw FileNotFoundError
+# TODO - Scratch this class and use those from activity.py instead.
 class Vcf:
 
     def __init__(self, sample_name, input_path, output_path):
         self.name = sample_name
         self.vcf_f = open(input_path)
         self.matches = []
-        if output_path != None:
+        if output_path is not None:
             self.out_f = open(output_path, "w")
         else:
             self.out_f = None
@@ -44,12 +37,12 @@ class Vcf:
         line = self.vcf_f.readline()
         info_needed = True
         info = ('##INFO=<ID=GZEXP,Number=.,Type=Float,Description="Gene z-score for Expression ',
-            '(variant expression vs reference expression)">')
+                '(variant expression vs reference expression)">')
 
         # Skip info lines.
         while line.startswith("#"):
             # Print new info lines at the top of the ##INFO section.
-            if self.out_f != None:
+            if self.out_f is not None:
                 if info_needed and line.startswith("##INFO"):
                     print(info, file=self.out_f)
                     info_needed = False
@@ -61,7 +54,7 @@ class Vcf:
 
     # Outputs old variant if output path is given.
     def next_variant(self, options):
-        if self.out_f != None:
+        if self.out_f is not None:
             self.output_var(options)
 
         self.matches = []
@@ -103,15 +96,14 @@ class Vcf:
 
         print(line, file=self.out_f)
 
-
     def parse_line(self, line):
         """
         Read in a line of the vcf and create a Position object from the variant position.
 
-        Args: 
+        Args:
             line (str): VCF line to parse.
 
-        Returns: 
+        Returns:
             None or a tuple with the following information (in order):
             The position of the variant as a Position class object (see below)
             A list of the motif names that matched that variant
@@ -155,66 +147,60 @@ class Position:
         self.start = start_pos
         self.end = end_pos
 
-
     def overlaps(self, pos_b):
         """
         Determine whether this Position overlaps Position pos_b.
 
-        Args: 
+        Args:
             pos_b (Position): A Position object.
 
-        Returns: 
+        Returns:
             (bool): Whether self overlaps with Position pos_b
         """
-        if pos_b == None or self.chrom != pos_b.chr:
+        if pos_b is None or self.chrom != pos_b.chr:
             return False
 
         start_max = max(self.start, pos_b.start)
-        end_min = min(self.end,   pos_b.end)
+        end_min = min(self.end, pos_b.end)
 
         return start_max <= end_min
 
-
     def add_wings(self, wing_length):
         """
-        Add wings to a Position start and end and return the two 
+        Add wings to a Position start and end and return the two
         resulting positions as a tuple.
 
-        Args: 
+        Args:
             position (int): Position to add the wings to.
             wing_length (int): The length of the wings to add to each side of the position.
 
         Returns:
-            wing_positions (tuple): A tuple containing the  position of each wing.
+            wing_positions (tuple): A tuple containing the position of each wing.
         """
         wing_length = int(wing_length)
 
-        wing_start = position - wing_length
-        wing_stop = position + wing_length
+        wing_start = self.start - wing_length
+        wing_stop = self.end + wing_length
 
         wing_positions = (wing_start, wing_stop)
 
         return wing_positions
 
-
     def __str__(self):
         return self.chrom + ":" + str(self.start) + "-" + str(self.end)
-
-####-Functions-####
 
 
 def get_gene_exp(gene_f, thresh):
     """
     Grabs gene names and expression values for each sample.
 
-    Args: 
+    Args:
         gene_f (str): Expression file in bed-like format.
-        thresh (float): Threshold used to filter genes that aren't expressed above this number in at
-            least one sample.
+        thresh (float): Threshold used to filter genes that aren't expressed above this number in at least one sample.
 
     Returns:
-        gene_dict (dict): Dictionary in following format 
-            {gene_name:(((chrom, (start, end)),[exp_vals])}
+        gene_dict (dict): Dictionary in following format
+            {gene_name:(Position,[exp_vals])}
     """
     gene_dict = {}
 
@@ -225,13 +211,14 @@ def get_gene_exp(gene_f, thresh):
             chrom = line[0]
             start = int(line[1])
             stop = int(line[2])
+            pos = Position(chrom, start, stop)
             gene_symb = line[3]
             exp_vals = [float(x) for x in line[4:]]
 
             # Check if any of the data values are above the threshold. Skip if not.
             for data in exp_vals:
                 if data >= thresh:
-                    gene_dict[gene_symb] = ((chrom, (start, stop)), exp_vals)
+                    gene_dict[gene_symb] = (pos, exp_vals)
                     break
 
     return gene_dict
@@ -243,37 +230,34 @@ def main(inp_file, gene_file, wing_size, output, no_overlap=False, thresh=0):
 
     Generate a z-score for expression of samples with the variant vs. without and report to output.
 
-    Args: 
+    Args:
         inp_file (str): Input file with locus positions and ID.
         gene_file (str): Gene annotation file in gtf format.
         wing_size (int): The length of the wings to add to each side the variant.
         output (str): Name of the output file.
-        no_overlap (bool): Determines if loci that overlap the gene are included in output or 
-            not. Default=False (included).
-        thresh (float): Genes that are below this threshold for all samples in the expression file
-            will be excluded. Good for excluding genes that aren't expressed.
+        no_overlap (bool): Determines if loci that overlap the gene are included in output or not.
+            Default=False (included).
+        thresh (float): Genes that are below this threshold for all samples in the expression file will be excluded.
+            Good for excluding genes that aren't expressed.
     """
 
     print("Parsing gene expression file.")
-    gene_dict = get_gene_expression(gene_file, thresh)
+    gene_dict = get_gene_exp(gene_file, thresh)
 
-    # Open the output file
     output_file = open(output, "w")
 
-    # Open the locus file
     with open(inp_file) as f:
 
-        print("Comparing loci positions to gene positions.", 
-            " This will take a while for large datasets.")
+        print("Comparing loci positions to gene positions.",
+              " This will take a while for large datasets.")
 
-        # Used to count the number with no genes that overlap
+        # Used to count the number with no genes that overlap.
         no_ovlp_count = 0
         ovlp_count = 0
 
         genes_ovlp = 0
         loci_excl_count = 0
 
-        # Iterate through file line by line
         for line in f:
 
             # Create list to hold genes for that locus ID
@@ -424,7 +408,7 @@ def main(inp_file, gene_file, wing_size, output, no_overlap=False, thresh=0):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)
-    # Create arguments and options
+
     parser.add_argument("-i", "--input", dest="input_file", required=True)
     parser.add_argument("-g", "--gene", dest="gene_file", required=True)
     parser.add_argument("-size", "--wingsize", dest="wing_size", type=int, default=50000)

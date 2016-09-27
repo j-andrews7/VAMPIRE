@@ -42,14 +42,12 @@ Args:
 import sys
 import argparse
 from math import log2
-from math import ceil
-from math import log10
 from pyfaidx import Fasta
 from Bio import motifs
 
 parser = argparse.ArgumentParser(usage=__doc__)
 
-
+# TODO - Remove use of this, will only create headaches later.
 class Options_list:
 
     def __init__(self):
@@ -115,7 +113,7 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
             greater than 1 for deletions (e.g. deletion of ACTG to G -> ref_l is 4)
         wing_l = Integer number of bases on each side of variant to return (wing
             length) a s full sequence.
-        fa_ind = indexed fasta file
+        fas = indexed fasta file
 
     Returns:
         ref_seq = Sequence (string) containing the variant base + specified
@@ -138,9 +136,11 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
 
 
 def get_reverse_complement(sequence):
-    """Returns the reverse complement of a sequence
+    """
+    Returns the reverse complement of a sequence.
 
-    Args: sequence = a string containing the original sequence (ACGT only)
+    Args: 
+        sequence (str): DNA sequence (ACGTN only)
 
     Returns: a string containing the reversed and complementary sequence
     """
