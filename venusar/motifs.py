@@ -47,6 +47,7 @@ from Bio import motifs
 
 parser = argparse.ArgumentParser(usage=__doc__)
 
+
 # TODO - Remove use of this, will only create headaches later.
 class Options_list:
 
@@ -139,7 +140,7 @@ def get_reverse_complement(sequence):
     """
     Returns the reverse complement of a sequence.
 
-    Args: 
+    Args:
         sequence (str): DNA sequence (ACGTN only)
 
     Returns: a string containing the reversed and complementary sequence
@@ -244,7 +245,7 @@ def get_motifs(motif_f, pc, default_th, base_pr):
         for line in f:
 
             # remove brackets and split on whitespace
-            line = line.strip().strip().strip('A').strip('C').strip('T').strip('G').strip().strip('[').strip(']').split()
+            line = line.strip().strip('A').strip('C').strip('T').strip('G').strip().strip('[').strip(']').split()
 
             # First line contains id and name
             if i == 0:
@@ -527,8 +528,6 @@ def process_local_env(motifs, baseline_p, matches, co_binders_dict, v_seq, r_seq
     ref_gc = gc / len(r_seq)
 
     # Get list of motifs that matched
-    id_list = []
-    matched_motifs = []
     for match in matches:
         match_motif = None
         # Find the matched motif's info
@@ -539,7 +538,7 @@ def process_local_env(motifs, baseline_p, matches, co_binders_dict, v_seq, r_seq
                 break
         # This should not happen as both come from same motifs list
         if match_motif is None:
-            print("**Error** process_local_environment unable to find motif")
+            print("**Error** process_local_env unable to find motif")
             print("\tName: " + str(id))
 
         (mot_id, mot_n, mot_th, pwm) = match_motif
@@ -673,7 +672,6 @@ def update_vcf(line, matches, output_f, options):
         refscores += str(round(match.ref_score, 4))
         # Sequence environment data
         if match.var_gc is not None:
-            ht_matches = ""
             varht += sublist_str(match.var_ht, 4)
             refht += sublist_str(match.ref_ht, 4)
             vargc += str(round(match.var_gc, 4))
