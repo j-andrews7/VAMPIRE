@@ -63,7 +63,6 @@ def filter_motifs(motifs, gene_dict, thresh):
             exp_vals = gene_dict[item]
         except:
             # TODO - Add option to retain motifs that don't match a gene in the expression file.
-            print(item + " not found in gene dict.")
             indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
             for x in indices:
                 if x not in failed:
@@ -85,7 +84,6 @@ def filter_motifs(motifs, gene_dict, thresh):
             for x in indices:
                 if x not in failed:
                     failed.append(x)
-    print("Passed: ", passed, "\nFailed: ", failed)
     return (passed, failed)
 
 
@@ -116,7 +114,6 @@ def process_line(line, output_f, gene_dict, thresh):
 
             # Delete by high index first so that lower indices aren't changed.
             for i in sorted(failed_idx, reverse=True):
-                print(i)
                 del motifns[i]
 
         # Create dict from other motif fields.
