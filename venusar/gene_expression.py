@@ -21,6 +21,7 @@ Args:
 # TODO - This is very incomplete.
 import argparse
 
+
 # TODO - Scratch this class and use those from activity.py instead.
 class Vcf:
 

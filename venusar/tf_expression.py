@@ -62,20 +62,29 @@ def filter_motifs(motifs, gene_dict, thresh):
             # TODO - Try to handle complexes and such - 'ATX::TCF3', etc.
             exp_vals = gene_dict[item]
         except:
+            # TODO - Add option to retain motifs that don't match a gene in the expression file.
             print(item + " not found in gene dict.")
+            indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
+            for x in indices:
+                if x not in failed:
+                    failed.append(x)
             continue
 
         # Check if any of the expression values meet the threshold.
         for x in exp_vals:
             if float(x) >= thresh:
                 pass_th = True
-                motif_idx = motifs.index(item)
-                passed.append(motif_idx)
+                indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
+                for x in indices:
+                    if x not in passed:
+                        passed.append(x)
                 break
 
         if pass_th is False:
-            motif_idx = motifs.index(item)
-            failed.append(motif_idx)
+            indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
+            for x in indices:
+                if x not in failed:
+                    failed.append(x)
     print("Passed: ", passed, "\nFailed: ", failed)
     return (passed, failed)
 
@@ -107,6 +116,7 @@ def process_line(line, output_f, gene_dict, thresh):
 
             # Delete by high index first so that lower indices aren't changed.
             for i in sorted(failed_idx, reverse=True):
+                print(i)
                 del motifns[i]
 
         # Create dict from other motif fields.
@@ -176,9 +186,7 @@ def get_genes(exp_file, samples, threshold):
             for idx in data_cols:
                 exp_vals.append(line[idx])
 
-            passed_filter = [x for x in exp_vals if float(x) >= threshold]
-            if len(passed_filter) > 0:
-                gene_dict[gene_name] = exp_vals
+            gene_dict[gene_name] = exp_vals
 
         return gene_dict
 

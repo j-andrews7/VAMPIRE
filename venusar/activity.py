@@ -399,7 +399,7 @@ def parse_activity_file(activity_file):
 
 def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False):
     """
-    Compare activity of loci for samples harboring a variant without them and those that do not.
+    Compare activity of loci for samples harboring a variant within a given locus to those samples that do not.
 
     For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and
     some value for each loci for each sample, find loci that overlap a variant and compare the value of samples with

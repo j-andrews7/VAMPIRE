@@ -1127,7 +1127,7 @@ sys.stdout.flush()
 # Grab motif list from motif file.
 print("Creating motif list from " + motif_file)
 sys.stdout.flush()
-(motifs, max_motif_l) = get_motifs(motif_file, pc, th, bp)
+(mtfs, max_motif_l) = get_motifs(motif_file, pc, th, bp)
 # debug print("Maximum motif length is "+str(max_motif_l)+".")
 
 
@@ -1319,18 +1319,18 @@ with open(inp_file) as vcf:
         # debug print("Calculated variant sequence: "+var_seq+", matching motifs...")
 
         # Calculate motif matches to variant sequence
-        plusmatch = match_motifs(motifs, bp, ref_seq, var_seq, wing_l)
+        plusmatch = match_motifs(mtfs, bp, ref_seq, var_seq, wing_l)
         # Add local environment data
-        process_local_env(motifs, bp, plusmatch, None, var_seq, ref_seq, wing_l)
+        process_local_env(mtfs, bp, plusmatch, None, var_seq, ref_seq, wing_l)
 
         # Also output matches to reverse complement
         r_refseq = get_reverse_complement(ref_seq)
         r_varseq = get_reverse_complement(var_seq)
 
         # Calculate motif matches to reverse complement
-        minusmatch = match_motifs(motifs, bp, r_refseq, r_varseq, wing_l)
+        minusmatch = match_motifs(mtfs, bp, r_refseq, r_varseq, wing_l)
         # Add local environment data
-        process_local_env(motifs, bp, minusmatch, None, r_varseq, r_refseq, wing_l)
+        process_local_env(mtfs, bp, minusmatch, None, r_varseq, r_refseq, wing_l)
 
         matches = plusmatch + minusmatch
 
