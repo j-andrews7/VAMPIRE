@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 For a given vcf file, compare each variant and its reference sequence to
 a set of motifs to determine if any are significantly altered.
@@ -15,6 +15,7 @@ Args:
         matrix with each row corresponding to a base and each column
         corresponding to a position (JASPAR format).
     -o (required) <output.vcf>: Name of output file to be created.
+
     -pc (optional) <0.1>: Pseudocounts value to be added to all positions of
         the motif frequency matrix before calculating the probability matrix.
     -th (optional) <0>: Motifs are considered a match if they score above a
@@ -37,10 +38,14 @@ Args:
     -fp (optional flag): If -fp (filter with peaks) is included, ChIP peaks
         that do not match any motif will not be included in the output (-co).
     -sk (optional flag): Use if sorted by karyotype.
+    -fc (optional): filter_chip YYY; can not also be called with fn
+    -fn (optional): filter_novel YYY; can not also be called with fc
 """
 
 import sys
 import argparse
+import time
+import pdb    # necessary for debugger; use pdb.set_trace()
 from math import log2
 from pyfaidx import Fasta
 from Bio import motifs
@@ -55,7 +60,7 @@ class Options_list:
         # Should lines in the vcf output file be excluded
         # if they don't match a motif?
         # -fm tag sets this to True
-        self.filter_vcf_mm = False
+        self.filter_vcf_motif = False
         # Should lines in the vcf output file be excluded
         # if they don't match a ChIP peak?
         # -fc tag sets this to True
@@ -72,7 +77,7 @@ class Options_list:
         # Is a ChIP peak bed file present?
         # -ci <chip_file.bed> will make this True
         self.chip_present = False
-        # Are the input files' chr sorted lexicographically (or by karyotype order)?
+        # Are input files chr sorted lexicographically (or by karyotype order)?
         # Input vcf file and chip bed file must be sorted the same way
         # -sk sets this to True
         self.sorted_lex = False
@@ -101,6 +106,12 @@ class Motif_match:
         self.ref_ht = []
         # co-binding motifs (currently not implemented)
         self.cobinders = []
+
+
+def timeString():
+    """ Return time as a string YearMonthDay.Hour.Minute.Second
+    """
+    return time.strftime('%Y%m%d.%H:%M:%S')
 
 
 def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
@@ -214,19 +225,22 @@ def get_motifs(motif_f, pc, default_th, base_pr):
         pc = pseudocount value (small, greater than zero) to be added to all
             positions in matrix
         default_th = default threshold value used if none is listed in the
-            motif file (should be third part of header if present). If None is given,
-            default threshold will be calculated for motifs.
+            motif file (should be third part of header if present).
+            If None is given, default threshold will be calculated for motifs.
         base_pr = probabilities as a float array of the form:
             [ PrA, PrC, PrT, PrG ]
-            ** Currently unused by this method but could be used to return a pssm
-            instead of a pwm
+            ** Currently unused by this method
+                but could be used to return a pssm instead of a pwm
 
     Returns:
         Motif sequences with names as a list of
         (id, name, threshold, weight matrix) triples (tuples) from the motif
         (.txt) file. Also returns maximum length motif.
-    """
 
+    XXX: QQQ: believe this should index motif length by TF.
+        also modify wing length on individual not max for all
+    """
+    pdb.set_trace()
     motif_list = []
     max_length = 0
 
@@ -235,6 +249,8 @@ def get_motifs(motif_f, pc, default_th, base_pr):
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
+        # 1 blank line separates each individual TF position weight matrix
+        # reading files assumes {header,A,C,G,T,blankline} order
         iden = "No id found"
         name = "No name found"
         # index for which line you are looking at in the motif matrix
@@ -244,14 +260,19 @@ def get_motifs(motif_f, pc, default_th, base_pr):
         # Iterate through file line by line.
         for line in f:
 
-            # remove brackets and split on whitespace
-            line = line.strip().strip('A').strip('C').strip('T').strip('G').strip().strip('[').strip(']').split()
+            # move line processing inside if handling to avoid stripping full name
+            # also not processing the empty line i=5
+            # line = line.strip().strip('A').strip('C').strip('T').strip('G').strip().strip('[').strip(']').split()
 
             # First line contains id and name
             if i == 0:
+                # must first remove brackets and split on whitespace
+                line = line.strip().strip('[').strip(']').split()
+
                 iden = line[0]
                 name = line[1]
-                # If a threshold is given, use it for this matrix. Else, use default.
+                    #print(format(i) + ":" + iden + " " + name)    # DEBUG LINE
+                # If threshold given, use it for this matrix. Else, use default.
                 if (len(line) > 2):
                     thresh = float(line[2])
                 else:
@@ -259,6 +280,10 @@ def get_motifs(motif_f, pc, default_th, base_pr):
 
             # Order of position weight matrices is A,C,G,T. Remove brackets etc.
             elif i < 5:
+                # must first remove brackets and split on whitespace
+                #     technically should modify index by found ACGT
+                    #print(i)    # DEBUG LINE
+                line = line.strip().strip('A').strip('C').strip('G').strip('T').strip().strip('[').strip(']').split()
                 matrix[i - 1] = line[0:]
                 if len(matrix[i - 1]) > max_length:
                     max_length = len(matrix[i - 1])
@@ -268,7 +293,9 @@ def get_motifs(motif_f, pc, default_th, base_pr):
                 # calculate weights for each position such that each column sums to 1
                 p_matrix = calculate_probabilities(matrix, pc)
                 tup = (iden, name, thresh, p_matrix)
+                # append the current TF matrix to the motif set
                 motif_list.append(tup)
+                # reset the tracker variables
                 i = -1
                 matrix = [[] for x in range(4)]
             i += 1
@@ -348,7 +375,7 @@ def match_motifs(motifs, b_prob, ref_seq, var_seq, wing_l):
         line+= str(m[2])[:6]+" at seq: "+m[3]+"\nReference matched motif "+m[1]
         line+= "           with score "+str(m[4])[:6]+" at seq: "+m[5]
         #debug line+= "\n\tRefseq: "+ref_seq+"\n\tVarseq: "+var_seq
-        print(line,file=output_f)"""
+        print(line,file=output_f)"""    # WARNING: debug using undefined global
 
     return matches
 
@@ -616,17 +643,17 @@ def get_next_var(opened_file):
     return (chr, pos, ref, var, line)
 
 
-def update_vcf(line, matches, output_f, options):
+def update_vcf(line, matches, output_fileHandle, options):
     """
     Updates the output file with the output in the correct variant call format
 
     Args:
         line = original vcf line (input file line)
         matches = list of Motif_match objects
-        output_f = output vcf
+        output_fileHandle = output vcf file handle
         options = options list
 
-    Returns: Nothing (updates output_f instead of returning)
+    Returns: Nothing (updates output_fileHandle instead of returning)
     """
 
     # First 8 columns should always be:
@@ -684,9 +711,9 @@ def update_vcf(line, matches, output_f, options):
     # If there are no matches, print the line unchanged or filter it out (return
     # without printing)
     if to_be_printed == 0:
-        if (not options.filter_vcf_mm and not options.filter_vcf_chip and
+        if (not options.filter_vcf_motif and not options.filter_vcf_chip and
                 not options.filter_vcf_no):
-            print(line, file=output_f)
+            print(line, file=output_fileHandle)
         return
 
     outline = ""
@@ -715,7 +742,7 @@ def update_vcf(line, matches, output_f, options):
         if (options.chip_present):
             outline += ";MOTIFC=" + chips
 
-    print(outline, file=output_f)
+    print(outline, file=output_fileHandle)
 
     return
 
@@ -733,42 +760,42 @@ def sublist_str(sublist, sig_figs):
     return ""
 
 
-def match_peaks(chrom, pos, peaks, chip_f, matches, output_f, options):
+def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options):
     """
     Returns an array of peaks that match the current chromosome and position.
-    Updates the coutput_f if one is present.
+    Updates the output_fileHandle if not None.
 
     Args:
         p_chr = (string) previous chromosome. Needed to know if a new chromosome
             is being entered.
         chr = (string) chromosome. Chromosomes 1-22, X, and Y are expected.
         pos = current position of the variant.
-        peaks = buffer of peaks. They should all be upstream of or overlapping the
+        peaks = buffer of peaks. They should all be upstream of or overlapping
             variant at chr and pos. Peaks is an array of tuples of the form:
             (chr, start pos, end pos, array of ChIP tfs, motif match array)
             tfs = transcription factors
-        chip_f = input ChIP bed file to be read from. This must have the start
-            positions in order within each chromosome and must be grouped by
-            chromosome.
+        chip_fh = input ChIP bed file handle to be read from.
+            This must have the start positions in order
+            within each chromosome and must be grouped by chromosome.
         matches = list of motif matches as tuples of the form:
             (name, variant score, reference score, ChIP match)
-        output_f = ChIP output bed file to be printed to.
+        output_fileHandle = ChIP output bed file to be printed to.
         options = Options_list object
 
     Returns: Peak buffer tuple of the form ( overlapping peak array, next peak )
         Array of peaks that overlap the current chromosome and position
-        Next peak (because you have to over-read to make sure you don't miss any)
-        match_peaks also updates coutput_f.
+        Next peak (because you must over-read to make sure you don't miss any)
+        match_peaks also updates output_fileHandle.
     """
 
-    if chip_f is None:
+    if chip_fh is None:
         return ([], matches)
 
     # Get rid of peaks that are upstream of the current chromosome
     idx = 0
     while idx < len(peaks) and chr_less(peaks[idx][0], chrom, options):
         # If the chromosome doesn't match, output the line and keep searching
-        print_peak(peaks[idx], output_f, options)
+        print_peak(peaks[idx], output_fileHandle, options)
         idx += 1
 
     # peak at idx will be included and the rest will be removed
@@ -776,7 +803,7 @@ def match_peaks(chrom, pos, peaks, chip_f, matches, output_f, options):
 
     # If previous peaks were not from correct chromosome, get there
     if (len(peaks) == 0):
-        new_peak = get_peak_at(chrom, pos, chip_f, output_f, options)
+        new_peak = get_peak_at(chrom, pos, chip_fh, output_fileHandle, options)
         # If end of file is reached
         if (new_peak is None):
             return ([], matches)
@@ -790,7 +817,7 @@ def match_peaks(chrom, pos, peaks, chip_f, matches, output_f, options):
 
         # If more peaks are needed
         if idx == len(peaks):
-            n_peak = get_next_peak(chip_f)
+            n_peak = get_next_peak(chip_fh)
 
             # If end of bed file is reached, then just return current list
             if n_peak is None:
@@ -823,7 +850,7 @@ def match_peaks(chrom, pos, peaks, chip_f, matches, output_f, options):
             # Otherwise both are before pos, so remove that peak and continue
             # This should only ever happen when idx is 0... but still
             else:
-                print_peak(peaks[idx], output_f, options)
+                print_peak(peaks[idx], output_fileHandle, options)
                 peaks = peaks[0:idx] + peaks[idx + 1:]
                 idx -= 1
         # Otherwise peak start is after the variant position, so stop
@@ -838,7 +865,7 @@ def get_next_peak(opened_file):
     """
     Reads in the next line of the bed and returns the next peak's information
 
-    Args: opened_file = an already open input .bed file
+    Args: opened_file = an already open input .bed file handle
 
     Returns: a tuple with the following information (in order) or None
         chromosome number as a string e.g. "chr1",
@@ -870,21 +897,21 @@ def get_next_peak(opened_file):
     return (chrom, start, end, tf_array, [])
 
 
-def get_peak_at(chrom, pos, chip_f, out_f, options):
+def get_peak_at(chrom, pos, chip_fh, out_fh, options):
     """
     Get the first peak where the end point of the peak is past the input pos.
-    Requires that chip_f is sorted the same way is the vcf input file.
-        This file will print all intermediate peaks to the out_f if one is given.
+    Requires that chip_fh is sorted the same way is the vcf input file.
+        This file will print all intermediate peaks to out_fh if not None.
 
     Args:
         chr = the new chromosome to get to
         pos = the new position to get to
-        chip_f = an already open input .bed file
-        out_f = an already open output file (to be printed to). May be None.
+        chip_fh = an already open input .bed file handle
+        out_fh = an already open output file (to be printed to). May be None.
         options = object from Options_list class
 
     Returns:
-        The first peak from chip_f that is the same chromosome as chr
+        The first peak from chip_fh that is the same chromosome as chr
         where the end point of the peak is past the input position (pos).
         If the end of file is reached, None is returned.
     """
@@ -893,7 +920,7 @@ def get_peak_at(chrom, pos, chip_f, out_f, options):
     # sys.stdout.flush()
 
     # Skip ahead until the correct chromosome
-    peak = get_next_peak(chip_f)
+    peak = get_next_peak(chip_fh)
 
     while peak is not None:
         (p_chr, p_sta, p_end, p_tfa, p_mm) = peak
@@ -905,37 +932,37 @@ def get_peak_at(chrom, pos, chip_f, out_f, options):
                 # sys.stdout.flush()
                 return peak
             else:
-                print_peak(peak, out_f, options)
+                print_peak(peak, out_fh, options)
 
         # If the chromosome is too low and there is an outfile, print
         elif chr_less(p_chr, chrom, options):
-            print_peak(peak, out_f, options)
+            print_peak(peak, out_fh, options)
         # If we have passed the chromosome
         else:
             return peak
 
-        peak = get_next_peak(chip_f)
+        peak = get_next_peak(chip_fh)
     # print("*get_peak_at returns None")
     # sys.stdout.flush()
     return None
 
 
-def print_peak(peak, file, options):
+def print_peak(peak, fileHandle, options):
     """
-    Prints the peak to the given file (or exits if no file is given)
+    Prints the peak to the given file handle (or exits if no file is given)
 
     Args:
         peak = ChIP peak of the form:
             (chr, start, stop, chip tf array, motif match tf array)
             chip tf array is an array of tf names
             motif match tf array is an array of (motif name, vscore, rscore, strand)
-        file = the file to print to. This file should already be opened. If this
-            file is None, nothing will happen.
+        fileHandle = the file to print to. This file should already be opened.
+            If this file is None, nothing will happen.
         options = Options_list object
 
     Returns: Nothing
     """
-    if file is None:
+    if fileHandle is None:
         return
 
     (chrom, start, end, c_array, mm_array) = peak
@@ -962,7 +989,7 @@ def print_peak(peak, file, options):
         motif_string += str(round(match.ref_score, 4))
 
     line += chip_string + "\t" + motif_string
-    print(line, file=file)
+    print(line, file=fileHandle)
 
     return
 
@@ -1011,13 +1038,18 @@ def chr_less(chr_left, chr_right, options):
                 return chr_left < chr_right
 
 
-""" Requires that vcf file have variants sorted by position within chromosomes
+
 """
+    ---- START OF MAIN ----
+
+    Requires that vcf file have variants sorted by position within chromosomes
+"""
+
 
 # Create arguments and options
 parser.add_argument("-i", "--input", dest="input_file", required=True)
-parser.add_argument("-r", "--ref", dest="ref_file", required=True)
-parser.add_argument("-m", "--motif", dest="motif_file", required=True)
+parser.add_argument("-r", "--ref", dest="file_reference", required=True)
+parser.add_argument("-m", "--motif", dest="file_motif", required=True)
 parser.add_argument("-o", "--output", dest="output_file", required=True)
 parser.add_argument("-ci", "--chip", dest="chip_file",
                     required=False, default=None)
@@ -1031,7 +1063,7 @@ parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
                     required=False, default=0.1)
 parser.add_argument("-ws", "--wing_size", dest="wing_size",
                     required=False, default=50)
-parser.add_argument("-fm", "--filter_o", action="count", required=False)
+parser.add_argument("-fm", "--filter_motif", action="count", required=False)
 parser.add_argument("-fc", "--filter_chip", action="count", required=False)
 parser.add_argument("-fn", "--filter_novel", action="count", required=False)
 parser.add_argument("-fp", "--filter_co", action="count", required=False)
@@ -1039,45 +1071,47 @@ parser.add_argument("-sk", "--kary_sort", action="count", required=False)
 
 args = parser.parse_args()
 
-# Easier to use argument variables
-inp_file = args.input_file
-ref_file = args.ref_file
-motif_file = args.motif_file
-out_file = args.output_file
-bp_file = args.baseline_file
-chip_file = args.chip_file
-chip_out_file = args.chip_out_file
+# Easier to use argument variables (YYY: why track duplicate variable names?)
+file_input = args.input_file
+file_reference_genome = args.file_reference
+file_motif = args.file_motif
+file_output = args.output_file
+file_baseline_prob = args.baseline_file    # defaults to None
+file_chip = args.chip_file
+file_output_chip = args.chip_out_file
 pc = float(args.pseudocounts)
 ws = int(args.wing_size)
 
 # Options list. Easier to pass in methods or use in code updates.
 options = Options_list()
-options.filter_vcf_mm = (args.filter_o is not None)
+options.filter_vcf_motif = (args.filter_motif is not None)
 
 options.sorted_lex = (args.kary_sort is None)
+
+print("Run started at:" + timeString())
 
 # Output so user can double check options
 print(("Input file: {}\nReference file: {}\nMotif file: {}\n" +
        "Output file: {}\nOptional arguments:\n    Pseudocounts value = {}").
       format(
-    inp_file, ref_file, motif_file,
-    out_file, pc
+    file_input, file_reference_genome, file_motif,
+    file_output, pc
 ))
 
-# Optional artuments to print
+# Optional arguments to print
 opt_args = ""
 
 if args.threshold is not None:
     th = float(args.threshold)
-    opt_args += "    Default match threshold = " + str(th) + "\n"
+    opt_args += "    Defined match threshold = " + str(th) + "\n"
 else:
     th = 0.0
     opt_args += "    Default match threshold = " + str(th) + "\n"
 
-chip_f = None
-coutput_f = None
+fileHan_chip = None
+fileHan_out_chip = None
 
-if (chip_file is not None):
+if (file_chip is not None):
     options.chip_present = True
 
     # Process chip related options
@@ -1085,11 +1119,11 @@ if (chip_file is not None):
     options.filter_vcf_chip = (args.filter_chip is not None)
     options.filter_vcf_no = (args.filter_novel is not None)
 
-    opt_args += "    ChIP file: " + chip_file + "\n"
-    chip_f = open(chip_file)
-    if (chip_out_file is not None):
-        opt_args += "    ChIP output file: " + chip_out_file + "\n"
-        coutput_f = open(chip_out_file, "w")
+    opt_args += "    ChIP file: " + file_chip + "\n"
+    fileHan_chip = open(file_chip)
+    if (file_output_chip is not None):
+        opt_args += "    ChIP output file: " + file_output_chip + "\n"
+        fileHan_out_chip = open(file_output_chip, "w")
         if (options.filter_bed):
             opt_args += "    Filter output ChIP bed for motif matches? Yes\n"
         if (options.filter_vcf_chip):
@@ -1097,37 +1131,42 @@ if (chip_file is not None):
         if (options.filter_vcf_no):
             opt_args += "    Filter output vcf for no ChIP peak overlap? Yes\n"
         if (options.filter_vcf_chip and options.filter_vcf_no):
+            # YYY: default to one? or should one override the other?
             opt_args += "Err: Cannot have -fn and -fc (two prev options)."
             opt_args += "    Both will be ignored.\n"
             options.filter_vcf_chip = False
             options.filter_vcf_no = False
-elif (chip_out_file is not None):
+elif (file_output_chip is not None):
     opt_args += "No ChIP file given, so no ChIP output file will be created\n"
 
-if (bp_file is not None):
-    opt_args += "    Baseline probabilities file: " + bp_file + "\n"
-if (options.filter_vcf_mm):
+if (file_baseline_prob is not None):
+    opt_args += "    Baseline probabilities file: " + file_baseline_prob + "\n"
+if (options.filter_vcf_motif):
     opt_args += "    Filter output vcf for motif matches? Yes\n"
 
 if (not options.sorted_lex):
     opt_args += "    Input vcf and Input ChIP bed are sorted by karyotype\n"
 
-print(opt_args)
+print(opt_args)    # debug outputs
 
-# Main
+# Main -- Post Arguments
 
-if (bp_file is None):
+if (file_baseline_prob is None):
     bp = [0.25, 0.25, 0.25, 0.25]
 else:
-    print("Reading in baseline probabilities:")
-    bp = get_baseline_probs(bp_file)
+    print("Reading in baseline probabilities (@" + timeString() + "):")
+    bp = get_baseline_probs(file_baseline_prob)
     print(bp)
 sys.stdout.flush()
 
 # Grab motif list from motif file.
-print("Creating motif list from " + motif_file)
+pdb.set_trace()
+print("Creating motif list from " + file_motif +
+      ", with pc=" + format(pc) +
+      ", threshold=" + format(th) +
+      ", bp=" + format(bp))
 sys.stdout.flush()
-(mtfs, max_motif_l) = get_motifs(motif_file, pc, th, bp)
+(mtfs, max_motif_l) = get_motifs(file_motif, pc, th, bp)
 # debug print("Maximum motif length is "+str(max_motif_l)+".")
 
 
@@ -1137,7 +1176,7 @@ sys.stdout.flush()
 wing_l = max(max_motif_l - 1, ws)
 
 # Open output file.
-output_f = open(out_file, "w")
+fileHan_output = open(file_output, "w")
 
 
 """#debug that motifs were calculated correctly
@@ -1153,19 +1192,22 @@ output_f = open(out_file, "w")
     print("")"""
 
 # Create index file from input fasta for quick searching
-print("Creating index from reference sequence for efficient searching...")
-print("This will be slow the first time.")
+print("Creating index from reference sequence for efficient searching..." +
+      timeString())
+print("This will be slow the first time (takes about 20 seconds on i7.)")
 sys.stdout.flush()
-fa_ind = Fasta(ref_file)
+fa_ind = Fasta(file_reference_genome)    # XXX: need to check; if present skip
+print("Completed fasta index @ " + timeString())
 
-print("Analyzing variants. This may take a while.\n")
+print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 sys.stdout.flush()
 
 # Open VCF file.
-with open(inp_file) as vcf:
+with open(file_input) as vcf:
 
     line = vcf.readline()
 
+    # building output vcf info line
     info_needed = True
     info = "##INFO=<ID=MOTIFN,Number=.,Type=String,Description="
     info += "\"Matched motif names\">"
@@ -1183,7 +1225,7 @@ with open(inp_file) as vcf:
     info += "\n##INFO=<ID=MOTIFRG,Number=.,Type=String,Description="
     info += "\"Reference environment GC content\">"
 
-    if (chip_f is not None):
+    if (fileHan_chip is not None):
         info += "\n##INFO=<ID=MOTIFC,Number=.,Type=Character,Description="
         info += "\"Motif validated by ChIP (Y/N)\">"
 
@@ -1191,14 +1233,14 @@ with open(inp_file) as vcf:
     while line.startswith("##"):
         # Print new info lines at the top of the ##INFO section
         if info_needed and line.startswith("##INFO"):
-            print(info, file=output_f)
+            print(info, file=fileHan_output)
             info_needed = False
-        print(line, file=output_f, end="")
+        print(line, file=fileHan_output, end="")
         line = vcf.readline()
 
     # Create appropriate header.
     header = line.strip()
-    print(header, file=output_f)
+    print(header, file=fileHan_output)
 
     # Previous computed sequence
     p_chr = ""
@@ -1207,8 +1249,8 @@ with open(inp_file) as vcf:
 
     curr_var = get_next_var(vcf)
 
-    # Queue of upcoming variants that may be close enough to require modification
-    # of the surrounding sequence downstream of the current variant
+    # Queue of upcoming variants that may be close enough to require
+    # modification of surrounding sequence downstream of the current variant
     # Will contain variants stored as a tuple of the form:
     # (chromosome, start position, reference seq, variant seq, line text)
     next_vars = []
@@ -1229,7 +1271,7 @@ with open(inp_file) as vcf:
         ref_seq = get_surrounding_seq(chr, pos, len(ref_bases), wing_l, fa_ind)
         surr_seq = ref_seq
 
-        # check that reference sequence matches the vcf's sequence for that position
+        # check that reference sequence matches vcf's sequence for position
         returned_ref_b = surr_seq[wing_l:-wing_l]
         if ref_bases.upper() != returned_ref_b.upper():
             print("**ERROR**\nVCF reference sequence for " + chr + " pos " + str(pos) +
@@ -1339,8 +1381,9 @@ with open(inp_file) as vcf:
 
         # Update ChIP buffer for current position
         # Update matches array with peak overlap data
-        (peak_buffer, matches) = match_peaks(chr, pos, peak_buffer, chip_f,
-                                             matches, coutput_f, options)
+        (peak_buffer, matches) = match_peaks(chr, pos, peak_buffer,
+                                             fileHan_chip,
+                                             matches, fileHan_out_chip, options)
 
         """print("match_peaks returned "+str(len(peak_buffer))+" peak(s):")
         for peak in peak_buffer:
@@ -1352,8 +1395,8 @@ with open(inp_file) as vcf:
         # Co-binding transcription factors currently not implemented
         cb_dict = None
 
-        # Create the correct line in VCF format and print to output_f
-        update_vcf(line, matches, output_f, options)
+        # Create the correct line in VCF format and print to file_output
+        update_vcf(line, matches, fileHan_output, options)
 
         sys.stdout.flush()
 
@@ -1364,7 +1407,7 @@ with open(inp_file) as vcf:
         p_chr = chr
         # position of the last base included
         p_end = pos + len(ref_bases) - 1
-        # p_seq only holds sequence related to bases upstream of the next variant
+        # p_seq only holds sequence related to bases upstream of next variant
         p_seq = surr_seq[:wing_l + len(var_bases)]
 
         # pop(0) takes from the end of the queue (front of the sequence)
@@ -1375,7 +1418,7 @@ with open(inp_file) as vcf:
 
     # Print remaining peaks
     for peak in peak_buffer:
-        print_peak(peak, coutput_f, options)
+        print_peak(peak, fileHan_out_chip, options)
 
 
 """#debug motif matching
@@ -1386,6 +1429,8 @@ with open(inp_file) as vcf:
 print("Done")
 
 # Close output files.
-output_f.close()
-if coutput_f is not None:
-    coutput_f.close()
+fileHan_output.close()
+if fileHan_out_chip is not None:
+    fileHan_out_chip.close()
+if fileHan_chip is not None:
+    fileHan_chip.close()

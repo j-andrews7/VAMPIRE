@@ -1,0 +1,9 @@
+// Comment Rule Notes:
+//    Three repeating capital letters are used as comment level identifiers.
+//    QQQ   question
+//    XXX   extreme; you don't expect XXX at work, you shouldn't find it in code either.
+//          XXX mark missing features/functionality and non-working/incomplete code
+//    YYY   code issue or comment; lower level
+//    ZZZ   solved issue; comment left for informative purposes
+
+ 
