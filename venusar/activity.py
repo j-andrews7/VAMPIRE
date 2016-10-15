@@ -12,7 +12,7 @@ Args:
     -a (str): Path to activity 'bed' file.
     -ov (str): Path to VCF output file to be created.
     -ob (str): Path to loci output file to be created.
-    -th (float, optional): Z-score magnitutde threshold that must be met for variants/loci to be reported to output.
+    -th (float, optional): Z-score magnitude threshold that must be met for variants/loci to be reported to output.
         Default is 0, so all loci a variant overlaps will be reported.
     -fan (int, optional): Set number of samples that must meet z-score threshold for a locus to be reported to
         bed output file. So this number of samples must have the variant and have the locus's activity be significantly
@@ -138,7 +138,7 @@ class Variant(object):
 
         # TODO - Check and make sure next two lines are functioning properly.
         info.insert(0, "SAMPSNR=" + ",".join([str(x.num_valid_ref[self]) for x in self.loci]))
-        info.insert(0, "SAMPSNV=" + ",".join([str(x.num_valid_ref[self]) for x in self.loci]))
+        info.insert(0, "SAMPSNV=" + ",".join([str(x.num_valid_var[self]) for x in self.loci]))
 
         # Use lists to maintain order in output so that LOCIID, LOCIVZ, SAMPTHN fields can all be matched up.
         z_scores = []
@@ -147,19 +147,21 @@ class Variant(object):
         for item in self.loci:
             loci_idens.append(item.iden)
             pass_thresh.append(item.num_pass_thresh[self])
-            tmp = "(" + ",".join([x for x in item.z_scores[self]]) + ")"
+            tmp = "(" + ",".join([str(x) for x in item.z_scores[self][0]]) + ")"
             z_scores.append(tmp)
-        info.insert(0, "SAMPTHN=" + ",".join(str(pass_thresh)))
+        info.insert(0, "SAMPTHN=" + ",".join([str(x) for x in pass_thresh]))
         info.insert(0, "LOCIVZ=" + ",".join(z_scores))
         info.insert(0, "LOCIID=" + ",".join(loci_idens))
 
-        if include_vcf and all([x == 0 for x in pass_thresh]):
-            return None
-        else:
+        # Check if any loci have samples that pass the Z-score threshold.
+        # TODO - Change this so it check that the NUMBER OF SAMPLES reaching the z-score threshold are enough.
+        if any([x >= 1 for x in pass_thresh]):
             self.info_fields = info
             self.line_list[7] = ";".join(self.info_fields)
             output = "\t".join(self.line_list)
             return output
+        else:
+            return None
 
 
 # TODO - Move into a utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
@@ -192,7 +194,7 @@ class Locus(object):
 
     def add_variant(self, variant, var_samples, ref_samples):
         """
-        Add Variant object variant to list of variants that overlap the Locus.
+        Add Variant object variant to list of Variants that overlap the Locus.
         """
         self.variants.append(variant)
         self.ref_scores[variant] = []
@@ -205,6 +207,7 @@ class Locus(object):
         self.z_scores[variant] = []
 
     def calc_z_score(self, ref_ind, var_ind, variant, thresh=0):
+        # TODO - Add docstring here.
         self.num_valid_ref[variant] = len(ref_ind)
         self.num_valid_var[variant] = len(var_ind)
 
@@ -221,20 +224,21 @@ class Locus(object):
             ref_mean = mean(self.ref_scores[variant])
             ref_std = stdev(self.ref_scores[variant])
 
-            if ref_std != 0:  # If only one sample has ref, will have no variance. Should never happen.
+            if ref_std == 0:  # If only one sample has ref, will have no variance. Should never happen.
                 for i in var_ind:
                     vals = self.z_scores[variant]
                     vals.append("NA")
                     self.z_scores[variant] = vals
             else:
-                score = [((x - ref_mean) / ref_std) for x in self.var_scores]
-                if abs(score) >= thresh:  # Check number of variant samples that passed the threshold.
-                    passed = self.num_pass_thresh[variant]
-                    passed += 1
-                    self.num_pass_thresh[variant] = passed
-                vals = self.z_scores[variant]
-                vals.append(score)
-                self.z_scores[variant] = vals
+                score = [((x - ref_mean) / ref_std) for x in self.var_scores[variant]]
+                for item in score:
+                    if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
+                        passed = self.num_pass_thresh[variant]
+                        passed += 1
+                        self.num_pass_thresh[variant] = passed
+                    vals = self.z_scores[variant]
+                    vals.append(score)
+                    self.z_scores[variant] = vals
         else:
             for i in var_ind:
                 vals = self.z_scores[variant]
@@ -486,16 +490,20 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             current_var = Variant(line, vcf_samples)
             loci_ovlp_var = []
 
-            for item in act_data:
-                if current_var.pos.chrom != item.pos.chrom:
-                    continue
-                elif current_var.pos.overlaps(item.pos):
-                    loci_ovlp_var.append(item)
+            # Check if any of the variant samples actually have activity data as well, skip if not.
+            for x in current_var.var_samples:
+                if x in common_samps:
+                    for item in act_data:
+                        if current_var.pos.chrom != item.pos.chrom:
+                            continue
+                        elif current_var.pos.overlaps(item.pos):
+                            loci_ovlp_var.append(item)
+                    break
 
             # If variant overlaps no loci, print to output only if include_vcf option used.
             if not loci_ovlp_var:
                 if include_vcf:
-                    print(line, file=output_vcf)
+                    print(line.strip(), file=output_vcf)
                     continue
                 else:
                     continue
@@ -518,6 +526,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
             if vcf_out_line is not None:
                 print(vcf_out_line, file=output_vcf)
+            elif include_vcf:
+                print(line.strip(), file=output_vcf)
 
     print("Filtering loci and creating BED output.")
     print("CHR", "START", "END", "ID", "VARIANT", "Z_SCORES", "NUM_PASS_THRESH", "COMMON_VAR_SAMPS",
