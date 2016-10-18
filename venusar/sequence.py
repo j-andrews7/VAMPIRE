@@ -112,6 +112,18 @@ class sequence:
 
     Some variables(parentIndex, referenceIndex, linked) are use with the
     sequenceArray class
+
+    XXX: change to not use reference linked list
+        instead have ref and variant core string + 2 wing strings of max length
+        then process each wing and cores separately, combine to compute
+        score, this way only score wings once for reference and variant score
+        if variant shorter than reference must insert characters from reference
+        genome to make the same length
+        for each motif just shorten the wings to process
+
+    XXX: also mark the samples for the variant by reading rest of the line
+    XXX: build across multiple variant indexes in wings with matching samples
+
     """
 
     def __init__(self):
@@ -228,3 +240,45 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):    # QQQ: any reas
     # debug print("\tSequence: "+str(ref_seq))
 
     return str(ref_seq)
+
+
+def readLineToSampleDictionaries(headerString):
+    """
+    Parse header of VCF file to return dictionary of sample names found in file
+
+    Given a string break on tabs, convert 9th-end elements to two dictionaries
+        1) samplesByName:  where word at element is key and value is index
+        2) samplesByIndex: where word at element is value and key is index
+
+    Args:
+        header_line (str): Header line from VCF file.
+
+    Returns:
+        2 dictionaries (see above description)
+        (samplesByName, samplesByIndex)
+
+    reference: based on get_vcf_samples
+    """
+
+    samplesByName = {}
+    samplesByIndex = {}
+
+    line_list = headerString.strip().split("\t")
+
+    samples = line_list[9:]
+
+    for index in range(len(samples)):
+        sampleName = samples[index].split(".")[-1]
+        if (index > 0) and (sampleName in samplesByName):
+            # WARNING: previously defined key Name! QQQ: occurs? If yes --> bad
+            print((sampleName + " at " + format(index) + " repeat of index " +
+                    samplesByName[sampleName]))
+            # make sampleName unique by adding index
+            sampleName += format(index)
+
+        # add to the dictionary
+        samplesByName[sampleName] = index
+        samplesByIndex[index] = sampleName
+
+    return (samplesByName, samplesByIndex)
+
