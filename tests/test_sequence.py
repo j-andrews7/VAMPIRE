@@ -5,7 +5,7 @@ import pytest
 # this is not a correct test file but worked for interactive testing
 import sequence
 import sequence
-x = sequence.sequence_element()
+x = sequence.sequenceElement()
 x.sub_left_wing("random",3)
 #'dom'
 x.sub_right_wing("random",3)

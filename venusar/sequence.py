@@ -64,7 +64,7 @@ class sequenceArray:
 
     def multivariant_list_build(self, limit_mv_dist):
         """
-        create a new sequence_element for joined variant set for each case:
+        create a new sequenceElement for joined variant set for each case:
             same chromosome + same sample + within limit_mv_dist --> join seq
         characters between variants drawn from reference genome fasta index
 
@@ -81,17 +81,17 @@ class sequenceArray:
         """
         print("XXX: function NOT implemented yet. Please check in later.")
         # multivar_str = var_seq1 + reference_space + var_seq2
-        # new_element = sequence_element()
+        # new_element = sequenceElement()
         #    # grab name, position, snip from var_seq1
         # new_element.seq_var = multivar_str
         # sequenceArray.add_seq(new_element)
         return
 
 
-class sequence_element:
+class sequenceElement:
     """
     class used to define sequence objects built from
-    sequence_str objects for separate variant, reference, and wing strings
+    sequenceStr objects for separate variant, reference, and wing strings
     Mark the samples for the variant by reading rest of the line
 
     How Used:
@@ -110,10 +110,10 @@ class sequence_element:
         self.name = ""       # often the chromosome name
         self.position = -1   # position within genome (index)
         self.snip = True     # false if not a sequence snip
-        self.seq_var = sequence_str()    # variable object for variant sequence
-        self.seq_ref = sequence_str()    # variable object for reference seq.
-        self.seq_left_wing = sequence_str()   # left wing sequence object
-        self.seq_right_wing = sequence_str()  # right wing sequence object
+        self.seq_var = sequenceStr()    # variable object for variant sequence
+        self.seq_ref = sequenceStr()    # variable object for reference seq.
+        self.seq_left_wing = sequenceStr()   # left wing sequence object
+        self.seq_right_wing = sequenceStr()  # right wing sequence object
         self.samples = []     # set of sample (by index) for this sequence
                               # index from placement in file just like header
 
@@ -179,7 +179,7 @@ class sequence_element:
         return
 
 
-class sequence_str:
+class sequenceStr:
     """
     create sequence string data structure used to build sequence elements
     all sequence strings are DNA sequence (ACGTN only)
