@@ -119,7 +119,7 @@ class motifElement:
         """
         Given a count motif matrix, return motif probabilities
             matrix columns are positions
-            matrix rows are for bases, order ACGT    XXX incorrect? see note
+            matrix rows are for bases, order ACGT    XXX|QQQ make sure notes match
 
         Each input matrix element represents the number of times that base
         appears at that position in that motif for base defined by row and
@@ -139,8 +139,8 @@ class motifElement:
         # for clarity (also note: self.positions = length any matrix row)
         a = self.matrix[0]
         c = self.matrix[1]
-        t = self.matrix[2]    # XXX|QQQ: is this correct? t is 2 and g is 3?
-        g = self.matrix[3]
+        g = self.matrix[2]
+        t = self.matrix[3]
 
         # QQQ: change to use numpy methods --> faster?
         # initialize output matrix of same size as input matrix
@@ -219,7 +219,6 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
 
     XXX: QQQ: believe this should index motif length by TF.
         also modify wing length on individual not max for all
-    XXX order of base_pr
     """
 
     motifSet = motifArray()
