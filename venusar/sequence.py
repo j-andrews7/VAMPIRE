@@ -121,11 +121,27 @@ class sequenceElement:
         self.__init__()
 
     def return_full_seq(self, sequence, wing_length):
-        """return sequence to process with wings attached
+        """
+        return sequence to process with wings attached
+        arguments:
+            sequence should be the core sequence
+            wing_length = integer number of characters to use from the wing seq
         """
         build_seq = self.sub_left_wing(self.seq_left_wing.seq, wing_length)
         build_seq += sequence
         build_seq += self.sub_right_wing(self.seq_right_wing.seq, wing_length)
+        return build_seq
+
+    def return_full_seq_reverse_complement(self, sequence, wing_length):
+        """
+        return sequence to process with wings attached
+        arguments:
+            sequence should be the reverse complement of the core sequence
+            wing_length = integer number of characters to use from the wing seq
+        """
+        build_seq = self.sub_right_wing(self.seq_right_wing.seq_rev_complement, wing_length)
+        build_seq += sequence
+        build_seq += self.sub_left_wing(self.seq_left_wing.seq_rev_complement, wing_length)
         return build_seq
 
     def return_full_ref_seq(self, wing_length):
@@ -273,7 +289,7 @@ class sequenceStr:
 
         return
 
-    # def reverse_complementInt     functionality by rev str --> convert2int
+    # def reverse_complement_int     functionality by rev str --> convert2int
     #    i.e. convert2IntReverse()
 
 
