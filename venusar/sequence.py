@@ -130,11 +130,20 @@ class sequenceElement:
 
     def return_full_ref_seq(self, wing_length):
         """return reference string to process from seq_ref, wings, and lengths"""
-        return self.return_full_seq(self.seq_ref, wing_length)
+        return self.return_full_seq(self.seq_ref.seq, wing_length)
 
     def return_full_var_seq(self, wing_length):
         """return variant string to process from seq_var, wings, and lengths"""
-        return self.return_full_seq(self.seq_var, wing_length)
+        return self.return_full_seq(self.seq_var.seq, wing_length)
+
+    def return_full_ref_seq_reverse_complement(self, wing_length):
+        """return reference string to process from seq_ref, wings, and lengths"""
+        return self.return_full_seq(self.seq_ref.seq_rev_complement, wing_length)
+
+    def return_full_var_seq_reverse_complement(self, wing_length):
+        """return variant string to process from seq_var, wings, and lengths"""
+        return self.return_full_seq(self.seq_var.seq_rev_complement, wing_length)
+
 
     def sub_left_wing(self, sequence_string, return_length):
         """
