@@ -120,6 +120,22 @@ class sequenceElement:
     def clear(self):
         self.__init__()
 
+    def return_full_seq(self, sequence, wing_length):
+        """return sequence to process with wings attached
+        """
+        build_seq = self.sub_left_wing(self.seq_left_wing.seq, wing_length)
+        build_seq += sequence
+        build_seq += self.sub_right_wing(self.seq_right_wing.seq, wing_length)
+        return build_seq
+
+    def return_full_ref_seq(self, wing_length):
+        """return reference string to process from seq_ref, wings, and lengths"""
+        return self.return_full_seq(self.seq_ref, wing_length)
+
+    def return_full_var_seq(self, wing_length):
+        """return variant string to process from seq_var, wings, and lengths"""
+        return self.return_full_seq(self.seq_var, wing_length)
+
     def sub_left_wing(self, sequence_string, return_length):
         """
         return a sequence string of return_length from sequence_string
@@ -131,7 +147,7 @@ class sequenceElement:
 
         seq_length = len(sequence_string)
         if (return_length > seq_length):
-            return (sequence_string)
+            return sequence_string
 
         return sequence_string[(seq_length - return_length):]
 
@@ -146,26 +162,9 @@ class sequenceElement:
 
         seq_length = len(sequence_string)
         if (return_length > seq_length):
-            return (sequence_string)
+            return sequence_string
 
         return sequence_string[:return_length]
-
-    def return_full_seq(self, sequence, wing_length):
-        """return sequence to process with wings attached
-        QQQ:XXX: why does ninja ide think sub_left_wing & sub_right_wing do not exist?
-        """
-        build_seq = sub_left_wing(self.seq_left_wing.seq, wing_length)
-        build_seq += sequence
-        build_seq += sub_right_wing(self.seq_right_wing.seq, wing_length)
-        return build_seq
-
-    def return_full_ref_seq(self, wing_length):
-        """return reference string to process from seq_ref, wings, and lengths"""
-        return return_full_seq(self.seq_ref, wing_length)
-
-    def return_full_var_seq(self, wing_length):
-        """return variant string to process from seq_var, wings, and lengths"""
-        return return_full_seq(self.seq_var, wing_length)
 
     def set_seq_left_wing(self, wing_length, fasta_index):
         """
