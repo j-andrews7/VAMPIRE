@@ -157,6 +157,15 @@ class sequenceElement:
         self.seq_var.seq = reference_seq
         self.seq_ref.seq = variant_seq
 
+    def assign_rev_complement(self):
+        """
+        compute the reverse complement of the 4 elements (var, ref, left, right)
+        """
+        self.seq_var.reverse_complement()
+        self.seq_ref.reverse_complement()
+        self.seq_left_wing.reverse_complement()
+        self.seq_right_wing.reverse_complement()
+
     def assign_samples(self, file_samples_array):
         """
         Convert passed sparse array into array of populated items only
@@ -165,11 +174,10 @@ class sequenceElement:
 
         Args:
             file_samples_array (technically a list)
+            file_samples_array = line_list[9:]    # example input from vcf file
         Returns:
             Sets self.samples
         """
-
-        #file_samples_array = line_list[9:]    # example of input
 
         # using regular expression to match on numbers to append sample set
         # QQQ: maybe use lenght not .\. or convert to number or ? maybe faster
@@ -183,87 +191,119 @@ class sequenceElement:
     def clear(self):
         self.__init__()
 
+    def get_surround_seq(self, wing_length, fasta_object, force_ref_match):
+        """
+        Use general get_surrounding_seq function to query reference genome file
+        for the surrounding sequence. Then pull out substrings to define the
+        left and right wings. Read then splits because file read is expensive.
+        Need wing_length and FASTA index. Other inputs defined.
+
+        Args:
+            wing_length = Integer number of bases on each side of variant to
+                return full sequence overlapping the variant.
+            fasta_object = indexed fasta file object
+            force_ref_match = (boolean) if true then force variant reference
+                bases to match FASTA reference
+        WARNING: if force_ref_match = True and this function was called after
+            manipulation of non-seq parts of seq_ref sequenceStr object then
+            those parts (int, rev_complement, rev_complement_int) are invalid.
+            This function does not handle updating none string sequence parts.
+        Returns:
+            sets self.seq_left_wing and self.seq_right_wing
+        """
+        #ref_seq = get_surrounding_seq(chr, pos, len(ref_bases), wing_l, fa_ind)
+        surr_seq = get_surrounding_seq(self.name, self.position,
+                        len(self.seq_ref.seq), wing_length, fasta_object)
+
+        # check that reference sequence matches vcf's sequence for position
+        returned_ref_b = surr_seq[wing_length:-wing_length]
+        if self.seq_ref.seq.upper() != returned_ref_b.upper():
+            print(("**ERROR**\nVCF reference sequence for " +
+                self.name + " pos " + str(self.position) + ":\n\t\"" +
+                self.seq_ref.seq +
+                "\" does not match reference file sequence:\n\t\"" +
+                returned_ref_b + "\"."))
+            if force_ref_match:
+                self.seq_ref.seq = returned_ref_b
+                print(("Forced reference sequence match for variant " +
+                    self.name + " pos " + str(self.position)))
+
+        # assign wing sequence strings
+        self.seq_left_wing = sub_from_left(surr_seq, wing_length)
+        self.seq_right_wing = sub_from_right(surr_seq, wing_length)
+        return
+
+    def print_str(self):
+        """
+        create a string of the sequence strings to print
+        QQQ: add an integer string version later by boolean flag?
+        """
+        print_string = "\tvariant core   : " + self.seq_var.seq + "\n"
+        print_string += "\treference core: " + self.seq_ref.seq + "\n"
+        print_string += "\tleft_wing : " + self.seq_left_wing.seq + "\n"
+        print_string += "\tright_wing: " + self.seq_right_wing.seq + "\n"
+        return print_string
+
     def return_full_seq(self, sequence, wing_length):
         """
-        return sequence to process with wings attached
-        arguments:
+        return sequence to process with wings attached. Uses sub_from_left and
+        sub_from_right methods to reduce wing sizes to requested length.
+
+        Arguments:
             sequence should be the core sequence
             wing_length = integer number of characters to use from the wing seq
+        Returns:
+            string of left wing + sequence string + right wings
         """
-        build_seq = self.sub_left_wing(self.seq_left_wing.seq, wing_length)
+        build_seq = sub_from_left(self.seq_left_wing.seq, wing_length)
         build_seq += sequence
-        build_seq += self.sub_right_wing(self.seq_right_wing.seq, wing_length)
+        build_seq += sub_from_right(self.seq_right_wing.seq, wing_length)
         return build_seq
 
     def return_full_seq_reverse_complement(self, sequence, wing_length):
         """
-        return sequence to process with wings attached
-        arguments:
+        return sequence to process with wings attached. Uses sub_from_left and
+        sub_from_right methods to reduce wing sizes to requested length.
+
+        Arguments:
             sequence should be the reverse complement of the core sequence
             wing_length = integer number of characters to use from the wing seq
+        Returns:
+            For all strings the reverse complement returns
+            string of right wing + sequence string + left wings
         """
-        build_seq = self.sub_right_wing(self.seq_right_wing.seq_rev_complement, wing_length)
+        build_seq = sub_from_right(self.seq_right_wing.seq_rev_complement, wing_length)
         build_seq += sequence
-        build_seq += self.sub_left_wing(self.seq_left_wing.seq_rev_complement, wing_length)
+        build_seq += sub_from_left(self.seq_left_wing.seq_rev_complement, wing_length)
         return build_seq
 
     def return_full_ref_seq(self, wing_length):
-        """return reference string to process from seq_ref, wings, and lengths"""
+        """
+        return reference string to process from seq_ref and wings cropped to
+        the specified length
+        """
         return self.return_full_seq(self.seq_ref.seq, wing_length)
 
     def return_full_var_seq(self, wing_length):
-        """return variant string to process from seq_var, wings, and lengths"""
+        """
+        return variant string to process from seq_var and wings cropped to
+        the specified length
+        """
         return self.return_full_seq(self.seq_var.seq, wing_length)
 
     def return_full_ref_seq_reverse_complement(self, wing_length):
-        """return reference string to process from seq_ref, wings, and lengths"""
+        """
+        return the reverse complement of the reference string to process
+        built from from seq_ref and wings cropped to specified length
+        """
         return self.return_full_seq(self.seq_ref.seq_rev_complement, wing_length)
 
     def return_full_var_seq_reverse_complement(self, wing_length):
-        """return variant string to process from seq_var, wings, and lengths"""
+        """
+        return the reverse complement of the variant string to process
+        built from from seq_var and wings cropped to specified length
+        """
         return self.return_full_seq(self.seq_var.seq_rev_complement, wing_length)
-
-
-    def sub_left_wing(self, sequence_string, return_length):
-        """
-        return a sequence string of return_length from sequence_string
-        drops values at start ie chops off left side
-        if return_length > length sequence_string --> does NOT pad
-        """
-        if (return_length <= 0):
-            return ""
-
-        seq_length = len(sequence_string)
-        if (return_length > seq_length):
-            return sequence_string
-
-        return sequence_string[(seq_length - return_length):]
-
-    def sub_right_wing(self, sequence_string, return_length):
-        """
-        return a sequence string of return_length from sequence_string
-        drops values at end ie chops off right side
-        if return_length > length sequence_string --> does NOT pad
-        """
-        if (return_length <= 0):
-            return ""
-
-        seq_length = len(sequence_string)
-        if (return_length > seq_length):
-            return sequence_string
-
-        return sequence_string[:return_length]
-
-    def set_seq_left_wing(self, wing_length, fasta_index):
-        """
-        uses variant position to pull left wing from reference genome
-        Args:
-            wing_length    integer of number of bases to return
-            fasta_index    the fasta indexed reference genome
-        """
-        # XXX: incomplete
-        # self.seq_left_wing.seq = get_surrounding_seq ...
-        return
 
 
 class sequenceStr:
@@ -274,10 +314,10 @@ class sequenceStr:
     def __init__(self):
         # create the object: number in comment corresponds to many
         #    class function arguments: str_index
-        self.seq = ""                   # 0. sequence as a string
-        self.seq_int = []               # 1. sequence as a set of numbers
-        self.seq_rev_complement = ""    # 2. sequence reverse complement as string
-        self.seq_rev_complement_int = []  # 3. sequence reverse complement as numbers
+        self.seq = ""                   # sequence as a string
+        self.seq_int = []               # sequence as a set of numbers
+        self.seq_rev_complement = ""    # sequence reverse complement as string
+        self.seq_rev_complement_int = []  # sequence reverse complement as numbers
         # QQQ: make numpy arrays of Int?
 
     def convert2int(sequence):    # QQQ: convert to numpy array?
@@ -347,10 +387,45 @@ class sequenceStr:
     #    i.e. convert2IntReverse()
 
 
-# ______ START METHODS RELATED TO THE CLASS BUT NOT TIED TO IT _____
+# ______ START METHODS RELATED TO THE CLASS BUT NOT EXPLICITLY TIED TO IT _____
 
-# QQQ: rethink --> need ref and variant sequence for surrounding
-def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):    # QQQ: any reason to not be sequence class method?
+
+def crop_from_left(sequence_string, crop_length):
+    """
+    return a sequence string without first crop_length characters
+    drops values at start ie chops off left side
+    if crop_length > length sequence_string --> returns ""
+    if crop_length <= 0 returns string
+    """
+    if (crop_length <= 0):
+        return sequence_string
+
+    seq_length = len(sequence_string)
+    if (crop_length > seq_length):
+        return ""
+
+    return sequence_string[crop_length:]
+
+
+def crop_from_right(sequence_string, crop_length):
+    """
+    return a sequence string without last crop_length characters
+    drops values at end ie chops off right side
+    if crop_length > length sequence_string --> returns ""
+    if crop_length <= 0 returns string
+    """
+    if (crop_length <= 0):
+        return sequence_string
+
+    seq_length = len(sequence_string)
+    if (crop_length > seq_length):
+        return ""
+
+    return sequence_string[:-crop_length]
+
+
+# QQQ: any reason to not be sequenceElement class method?
+def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     """ Return sequence containing variant base + specified number
         of bases on each side from reference sequence file.
 
@@ -360,12 +435,12 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):    # QQQ: any reas
         ref_l = length of reference sequence. Will be 1 for SNP/insertions but
             greater than 1 for deletions (e.g. deletion of ACTG to G -> ref_l is 4)
         wing_l = Integer number of bases on each side of variant to return (wing
-            length) a s full sequence.
+            length) as full sequence.
         fas = indexed fasta file object
 
     Returns:
         ref_seq = Sequence (string) containing the variant base + specified
-        number of bases on each side from reference sequence file.
+        number of bases on each side of variant. Data from reference genome file.
     """
 
     """#debug
@@ -375,7 +450,7 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):    # QQQ: any reas
     # fas['chr1'][0:1] returns the first base (just one)
     # is either  0 indexed and max (last) base is not returned
     #   or      1 indexed and min (first) base isn't returned
-    # A 'sequence' object is returned by fas, but converted by a string for return
+    # fas returns a 'sequence' object, converted by a string for return
     ref_seq = fas[chromo][var_pos - wing_l - 1: var_pos + wing_l + ref_l - 1]
 
     # debug print("\tSequence: "+str(ref_seq))
@@ -423,4 +498,40 @@ def read_line2sample_dictionaries(headerString):
         samplesByIndex[index] = sampleName
 
     return (samplesByName, samplesByIndex)
+
+
+def sub_from_left(sequence_string, return_length):
+    """
+    return a sequence string of return_length from sequence_string
+    drops values at start ie chops off left side
+    if return_length > length sequence_string --> does NOT pad
+
+    note: function was originally part of sequenceElement as sub_left_wing
+    """
+    if (return_length <= 0):
+        return ""
+
+    seq_length = len(sequence_string)
+    if (return_length > seq_length):
+        return sequence_string
+
+    return sequence_string[(seq_length - return_length):]
+
+
+def sub_from_right(sequence_string, return_length):
+    """
+    return a sequence string of return_length from sequence_string
+    drops values at end ie chops off right side
+    if return_length > length sequence_string --> does NOT pad
+
+    note: function was originally part of sequenceElement as sub_right_wing
+    """
+    if (return_length <= 0):
+        return ""
+
+    seq_length = len(sequence_string)
+    if (return_length > seq_length):
+        return sequence_string
+
+    return sequence_string[:return_length]
 

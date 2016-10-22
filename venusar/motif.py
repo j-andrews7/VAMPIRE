@@ -6,6 +6,11 @@ does NOT contain a main function
 intended to be imported with motifs.py and other for related functionality
 """
 
+import sequence    # need sub_from_*, crop_from_*
+                   # (maybe later need int func and split wing/core processing)
+                   # then would want base sequence object
+from math import log2
+
 class motifArray:
     """this class is the array of motif Elements"""
 
@@ -75,6 +80,198 @@ class motifArray:
     def length(self):
         """return length of the set of motifs for the array"""
         return (len(self.motifs))
+
+    def motif_match(self, baseline_p, ref_seq, var_seq, wing_l):
+        """
+        Takes a reference and variant sequence string, then checks for matches
+        in the motif set. Outputs match score for both ref seq and var seq
+        for any case where either matches above the motif element threshold.
+        (former name: match_motifs, wanted grouped in class function list)
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            ref_seq = Reference sequence represented as a string (ACGT only)
+            var_seq = Variant sequence represented as a string (ACGT only)
+            wing_l = Integer length of sequence of bases flanking the variant
+                (generally >= self.max_positions, should match value used to
+                create ref_seq and var_seq)
+
+        Returns: A list of Motif_match objects
+        """
+
+        # scoring returns: motif match array with the form
+        #    (id, name, threshold, max_score, match_seq)
+        scored = self.motif_scores(baseline_p, var_seq, wing_l)
+        r_scored = self.motif_scores(baseline_p, ref_seq, wing_l)
+
+        matches = []
+
+        # generate list of motifs that matched var seq to compare ref seq matches
+        for idx in range(len(scored)):
+            (iden, name, th, max_score, match_seq) = scored[idx]
+            (rid, rname, rth, rmax_score, rmatch_seq) = r_scored[idx]
+            if (max_score >= th or rmax_score >= rth):
+                # XXX:QQQ: there needs to be a margin of error for th != rth; using 1%. appropriate?
+                if (iden != rid or name != rname or abs((th - rth) / th) > .01):
+                    print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
+                          iden + " != " + rid +
+                          " or " + name + " != " + rname +
+                          " or " + th + " != " + rth))
+                # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
+                match = Motif_match(name, max_score, rmax_score)
+                matches.append(match)
+
+        # output variant seq matches vs ref seq matches
+        """for m in matches:
+            line = "Variant matched motif "+m[1]+" ("+m[0]+") with score "
+            line+= str(m[2])[:6]+" at seq: "+m[3]+"\nReference matched motif "+m[1]
+            line+= "           with score "+str(m[4])[:6]+" at seq: "+m[5]
+            #debug line+= "\n\tRefseq: "+ref_seq+"\n\tVarseq: "+var_seq
+            print(line,file=output_f)"""    # WARNING: debug using undefined global
+
+        return matches
+
+    def motif_scores(self, baseline_p, sequence_str, wing_l, normalize):
+        """
+        Calculate if any motifs in the motif list match the given sequence.
+        Requires that no motif have a length of 0.
+        (former name: score_motifs, wanted grouped in class function list)
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_str = array of characters (strings 'A','C','G', or 'T')
+            wing_l = length of sequence of bases flanking the variant
+            normalize = boolean, if true then divide score by motif length
+                concern: if not normalized, longer motifs can generate higher
+                scores by length not true matches.
+
+        Returns:
+            matches = array of scores of the form:
+                ( id,  name,  threshold,  max_score,  match_seq,  motif_index )
+
+        """
+        # list of matches between motifs and sequence
+        scores = []
+
+        for motif_index in range(len(self.motifs)):
+            #### (iden, name, thresh, p_matrix) = tup
+            motif_element = self.motifs[motif_index]
+
+            # -- prepare the motif element and sequence string for scoring
+            if not motif_element.valid_flag:
+                continue
+
+            if motif_element.matrix_type == 0:
+                # need to calculate base occurence frequency by position. why
+                # didn't it do this during insertion? will call many times here
+                print("motif_scores: probabilities not previously calculated for " +
+                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                motif_element.calculate_probabilities()
+
+            # trim flanking bases to one less than motif length
+            # number of bases to trim
+            trim_amount = wing_l - motif_element.positions + 1
+            trim_seq = sequence.crop_from_left(sequence_str, trim_amount)
+            trim_seq = sequence.crop_from_right(trim_seq, trim_amount)
+
+            # -- actually do the scoring
+            # highest match score for this motif (based on starting position)
+            max_score = float("-inf")
+            # sequence that matched motif best
+            match_seq = ""
+
+            # check match to all positions where motif overlaps with variant
+            for pos in range(motif_element.positions):
+                # check match starting at position
+                # (score_motif will stop after the length of the motif)
+                pos_score = motif_element.motif_score(baseline_p, trim_seq[pos:])
+                if pos_score > max_score:
+                    max_score = pos_score
+                    match_seq = trim_seq[pos:pos + motif_element.positions]
+
+            if normalize:
+                max_score = max_score / motif_element.positions
+
+            # debug print("Max match score:"+str(max_score)+" for motif "+name+" and
+            # sequence "+match_seq+".")
+            tupl = (motif_element.id, motif_element.name,
+                    motif_element.threshold, max_score, match_seq, motif_index)
+            scores.append(tupl)
+
+        return scores
+
+    def process_local_env(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq):
+        """
+        Finds GC content, weak homotypic matches, and motif matches for co-binding
+            transcription factors. Co-binding tf currently not implemented.
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            matches = list of Motif_match objects, generated by motif_match
+            seq_element = sequenceElement object v_seq and r_seq belong to
+            co_binders = dictionary that lists co-binding transcription factors for
+                a given transcription factor name [feature not enabled. Use None]
+            v_seq = variant sequence array of characters (strings 'A','C','G', or 'T')
+            r_seq = reference sequence array of characters (strings 'A','C','G', or 'T')
+
+        Returns: Updates matches
+        XXX: this function maybe isn't properly updating class elements;
+            review call usage and code.
+        XXX: WARNING: ERROR: this function is confusing class and other elements
+            of the match
+        """
+
+        # Get GC content [QQQ: faster to convert to upper then count?]
+        gc = v_seq.count('G') + v_seq.count('g')
+        gc += v_seq.count('C') + v_seq.count('c')
+        var_gc = gc / len(v_seq)
+
+        gc = r_seq.count('G') + r_seq.count('g')
+        gc += r_seq.count('C') + r_seq.count('c')
+        ref_gc = gc / len(r_seq)
+
+        # Get list of motifs that matched
+        for matches_index in range(len(matches)):
+            match = matches[matches_index]    # XXX
+            match_index = match[5]
+            if match_index < 0 or match[5] > self.length():
+                print(("**Error** process_local_env unable to find motif" +
+                    match[1] + ":id:" + match[0] ))
+                continue;
+
+            # motif info
+            #self.motifs[match_index].matrix
+            #self.motifs[match_index].threshold
+            match_motif = self.motifs[match_index]
+
+            # Find homotypic variant and reference matches
+            vh_matches = []
+            #rh_matches = []    # do not compute, same as vh_matches (XXX: test presumption)
+
+            # Check each wing seperately,
+            # homotypic matches should not overlap the variant
+            # because variant and reference wings match only compute once
+            # wing size = size of the motif matched?
+            left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq, match_motif.positions)
+            right_wing = sequence.sub_from_right(seq_element.seq_right_wing.seq, match_motif.positions)
+            vh_matches = match_motif.ht_matches_in(baseline_p, left_wing)
+            vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
+
+            # Update the match information: XXX
+            match.var_ht = vh_matches
+            match.var_gc = var_gc
+            #match.ref_ht = rh_matches    # do not compute because same as var
+            match.ref_gc = ref_gc
+
+        # Finding co-binders currently not implemented
+
+        return matches    # XXX: wasn't returning anything at all before
 
     def search_set_max_position(self):
         """search elements in array to find and set max position information"""
@@ -181,6 +378,27 @@ class motifElement:
         self = self.__init__()    # ZZZ: note: self = probably not necessary
         return
 
+    def ht_matches_in(self, baseline_p, sequence_str):
+        """
+        Compute homotypic matches (scores above threshold) in the given sequence
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_str = array of characters (strings 'A','C','G', or 'T')
+        Returns:
+
+        see also: motifArray.motif_scores()
+        """
+        homotypic_matches = []
+        for pos in range(len(sequence_str) - len(self.positions) + 1):
+            pos_score = self.score_motif(baseline_p, sequence_str[pos:])
+            # Return the homotypic match if it is above the threshold
+            if pos_score > self.threshold:
+                homotypic_matches.append(pos_score)
+        return homotypic_matches
+
     def print_str(self):
         """return a string of the class object state"""
         print_string = self.name
@@ -193,6 +411,94 @@ class motifElement:
         print_string += (":base_probability:" + format(self.base_probability))
         print_string += (":matrix:" + self.matrix)
         return print_string
+
+    def score_base(self, probability, baseline_p):
+        """
+        compute the ... log likelihood ratio
+        XXX: not in score motif says natural log but this is log2
+        YYY: note this could be outside the class
+        """
+        if (probability == 0):
+            # should mathematically be negative infinity
+            # this should not occur with pseudocounts added in
+            return -100
+        else:
+            return log2(probability / baseline_p)
+
+    def score_motif(self, baseline_p, sequence_str):
+        """
+        Calculate match between probability matrix for motifElement and the
+            given sequence_str starting at the beginning of the sequence
+            and ending after the length of the motif.
+
+        Args:
+            p_matrix = probability matrix where rows are bases (A,C,G,T) and columns
+                are probabilities (that sum to 1) at a given position. All rows should
+                be the same length.
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_str = array of characters (strings 'A','C','G', or 'T')
+
+        Returns:
+            Match score between probability matrix and sequence_str
+        """
+
+        score = 0
+
+        if len(sequence_str) < len(self.positions):
+            print("Sequence shorter than probability matrix. Returning score of 0.")
+            return score
+
+        if not self.valid_flag or self.matrix_type != 1:
+            return score
+
+        for pos in range(len(self.positions)):
+            # Match base
+            if (sequence_str[pos] == 'A' or sequence_str[pos] == 'a'):
+                # natural log of likelihood ratio    ### XXX but computes log2!
+                score += self.score_base(self.matrix[0][pos], baseline_p[0])
+            elif (sequence_str[pos] == 'C' or sequence_str[pos] == 'c'):
+                score += self.score_base(self.matrix[1][pos], baseline_p[1])
+            elif (sequence_str[pos] == 'G' or sequence_str[pos] == 'g'):
+                score += self.score_base(self.matrix[2][pos], baseline_p[2])
+            elif (sequence_str[pos] == 'T' or sequence_str[pos] == 't'):
+                score += self.score_base(self.matrix[3][pos], baseline_p[3])
+            # else is score = 0 therefore do nothing
+
+        return score
+
+
+class Motif_match:
+    """
+    This class could be rolled into motifElement
+    Current theory; faster not to, like normalized database table set,
+    not duplicating motifElement variables don't need and don't need to loop
+    across the full motifArray set
+    """
+    def __init__(self, name, var_score, ref_score):
+        # The transcription factor (tf) name
+        self.name = name
+
+        # tf motif match information (variant and reference sequence max log
+        # likelihood score for the tf)
+        self.var_score = var_score
+        self.ref_score = ref_score
+
+        # Does the motif match fall inside a chip peak for the same tf
+        self.chip_match = False
+
+        # Sequence environment data
+        # variant and reference gc content
+        self.var_gc = None
+        self.ref_gc = None
+        # variant and reference homotypic matches
+        self.var_ht = []
+        self.ref_ht = []    # XXX: drop see process_local_env notes
+        # co-binding motifs (currently not implemented)
+        self.cobinders = []
+
+        self.motif_array_index = -1    # for corresponding motifArray object
 
 
 # ______ START METHODS RELATED TO THE CLASS BUT NOT TIED TO IT _____
@@ -227,7 +533,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
 
     motif_set = motifArray()
 
-    # Open provided motif file
+    # Open and import motif file: note: with always closes open file
     with open(motif_filename) as file_handle:
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
@@ -271,7 +577,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
                 base_element.base_probability = base_pr
                 base_element.pseudocount = pc
 
-                if (base_element.valid_flag):
+                if base_element.valid_flag:
                     # calculate base occurence frequency by position
                     base_element.calculate_probabilities()
 
@@ -294,9 +600,12 @@ def get_baseline_probs(baseline_f):
         baseline_f a file containing a probability array of the form:
             [ PrA PrC PrG PrT ]
         Where PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)
-        note: file format, can technically separate by separated by arbitrary
-        strings of any whitespace characters
-        (space, tab, newline, return, formfeed). Only space tested.
+        note1: the file can contain header lines marked by #
+        note2: file format can technically be separated by arbitrary strings of
+            any whitespace characters (space, tab, newline, return, formfeed).
+            Only space tested during code development.
+        note3: Separator must be whitespace, commas converted to empty string.
+        note4: subsequent lines ignored once a properly formatted line is found
 
     Returns:
         Array with probabilities as a float array of the form:
@@ -310,13 +619,17 @@ def get_baseline_probs(baseline_f):
     with open(baseline_f) as f:
         try:
             for line in f:
+                # remove header
+                if line.startswith("#"):
+                    continue
                 # remove commas, brackets, and whitespace on far left and right
                 line = line.strip().replace('[', '').replace(']', '').replace(',', '')
                 if line != "":
                     line = line.split()
-                    for idx in range(4):
-                        bp_array[idx] = float(line[idx])
-                    return bp_array
+                    if (len(line) >= 4):
+                        for idx in range(4):
+                            bp_array[idx] = float(line[idx])
+                        return bp_array
         except ValueError:
             print(("**ERROR** Baseline probability file incorrectly formatted.\n" +
                   "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
