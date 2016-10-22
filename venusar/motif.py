@@ -11,63 +11,64 @@ class motifArray:
 
     def __init__(self):
         self.max_positions = 0    # largest positions value for all Elements
-        self.max_positionsIndex = -1    # index of maximum position length
+        self.max_positions_index = -1    # index of maximum position length
         self.motifs = []
+        return
 
-    def addMotif(self, motifElementToAdd):
+    def add_motif(self, motif_element2add):
         """add passed element to the set"""
-        self.motifs.append(motifElementToAdd)
-        if (motifElementToAdd.positions > self.max_positions):
-            self.max_positions = motifElementToAdd.positions
-            self.max_positionsIndex = len(self.motifs) - 1
+        self.motifs.append(motif_element2add)
+        if (motif_element2add.positions > self.max_positions):
+            self.max_positions = motif_element2add.positions
+            self.max_positions_index = len(self.motifs) - 1
 
         return
 
-    def deleteMotif(self, motifIndex):
+    def delete_motif(self, motif_index):
         """remove passed element index from the set"""
-        if (motifIndex < 0 | motifIndex > len(self.motifs)):
+        if (motif_index < 0 | motif_index > len(self.motifs)):
             return
 
-        resetMaxLength = False
+        reset_max_length = False
         if len(self.motifs) > 1:
-            if motifIndex == self.max_positionsIndex:
-                resetMaxLength = True
+            if motif_index == self.max_positions_index:
+                reset_max_length = True
         else:
             self.__init__()    # reset to defaults
             return
 
         # get to here then know started with multi-element set
-        del self.motifs[motifIndex]
+        del self.motifs[motif_index]
 
-        if resetMaxLength:
-            self.searchSetMaxPosition()
+        if reset_max_length:
+            self.search_set_max_position()
 
         return
 
-    def join(self, motifArray2):
+    def join(self, motif_array2):
         """join another motifArray object to this motifArray object"""
 
         # check validity of the items to be joined
-        if type(motifArray2) is not motifArray:
+        if type(motif_array2) is not motifArray:
             return
         if motifArray.length() == 0:
             return
 
         # empty current, non-empty new --> replace
         if self.length() == 0:
-            self = motifArray2    # allowed in python?
+            self = motif_array2    # allowed in python?
             return
 
         # comparison elements
-        currentMax = [self.max_positions, self.max_positionsIndex]
-        joinedMax = [motifArray2.max_positions, motifArray2.max_positionsIndex]
-        originalLength = self.length()
+        current_max = [self.max_positions, self.max_positions_index]
+        joined_max = [motif_array2.max_positions, motif_array2.max_positions_index]
+        original_length = self.length()
 
         # -- compare and join
-        self.motifs.append(motifArray2.motifs)
-        if (joinedMax[0] > currentMax[0]):
-            self.max_positions = joinedMax[0]
-            self.max_positionsIndex = originalLength + joinedMax[1]
+        self.motifs.append(motif_array2.motifs)
+        if (joined_max[0] > current_max[0]):
+            self.max_positions = joined_max[0]
+            self.max_positions_index = original_length + joined_max[1]
 
         return
 
@@ -75,19 +76,19 @@ class motifArray:
         """return length of the set of motifs for the array"""
         return (len(self.motifs))
 
-    def searchSetMaxPosition(self):
+    def search_set_max_position(self):
         """search elements in array to find and set max position information"""
 
         # set values to defaults
         self.max_positions = 0
-        self.max_positionsIndex = -1
+        self.max_positions_index = -1
 
         # loop to set right value
         #for element in self.motifs:
         for index in range(0, (len(self.motifs) - 1)):
             if (self.motifs[index].positions > self.max_positions):
                 self.max_positions = self.motifs[index].positions
-                self.max_positionsIndex = index
+                self.max_positions_index = index
 
         return
 
@@ -105,15 +106,15 @@ class motifElement:
         self.matrix = [[] for x in range(4)]    # placeholder
             # matrix columns are positions
             # matrix rows are for bases, order ACGT
-        self.matrixType = 0     # 0 = count (Default), 1 = probability
+        self.matrix_type = 0    # 0 = count (Default), 1 = probability
                                 # set by calculate_probabilities()
         self.positions = 0      # number of positions for motif matrix
-                                # set by checkValid()
-        self.validFlag = False    # set by checkValid()
+                                # set by check_valid()
+        self.valid_flag = False  # set by check_valid()
             # QQQ: store both types of matrix? memory hit is likely small
         self.threshold = 0
         self.base_probability = [] * 4   # base pair probability
-        self.pseudoCount = 0    # count number to add before probability calc
+        self.pseudocount = 0    # count number to add before probability calc
 
     def calculate_probabilities(self):
         """
@@ -129,11 +130,11 @@ class motifElement:
         The position columns sum to 1.
 
         Pseudocounts are added in to avoid having a zero value in matrices with
-        small sample sizes; see motifElement.pseudoCount
+        small sample sizes; see motifElement.pseudocount
         """
 
         # only process count matrices that are valid
-        if (self.matrixType != 0 or not(self.validFlag)):
+        if (self.matrix_type != 0 or not(self.valid_flag)):
             return
 
         # for clarity (also note: self.positions = length any matrix row)
@@ -149,46 +150,49 @@ class motifElement:
         # divide each position by the sum of its column
         for pos in range(self.positions):
             total = float(a[pos]) + float(c[pos]) + float(g[pos]) + float(t[pos])
-            total += 4 * self.pseudoCount
+            total += 4 * self.pseudocount
             for base in range(4):
                 new_m[base][pos] = (float(self.matrix[base][pos]) +
-                     self.pseudoCount) / total
+                     self.pseudocount) / total
 
         self.matrix = new_m
-        self.matrixType = 1
+        self.matrix_type = 1
 
         return
 
-    def checkValid(self):
+    def check_valid(self):
         """
-            sets validFlag and positions for the motifElement
-            if all matrix elements are equal size --> set validFlag = True
+            sets valid_flag and positions for the motifElement
+            if all matrix elements are equal size --> set valid_flag = True
             if any matrix row length different than base length --> = False
         """
-        self.validFlag = True
+        self.valid_flag = True
         for mIndex in range(len(self.matrix)):
             if (mIndex == 0):
                 self.positions = len(self.matrix[mIndex])
             else:
                 if (self.positions != len(self.matrix[mIndex])):
-                    self.validFlag = False
+                    self.valid_flag = False
                     break
 
         return
 
     def clear(self):
         self = self.__init__()    # ZZZ: note: self = probably not necessary
+        return
 
-    def printStr(self):
-        printStr = self.name
-        printStr += (":id:" + self.id)
-        printStr += (":valid:" + self.validFlag)
-        printStr += (":matrixType:" + self.matrixType)
-        printStr += (":positions:" + self.positions)
-        printStr += (":threshold:" + self.threshold)
-        printStr += (":pseudoCount:" + self.pseudoCount)
-        printStr += (":base_probability:" + self.base_probability)
-        printStr += (":matrix:" + self.matrix)
+    def print_str(self):
+        """return a string of the class object state"""
+        print_string = self.name
+        print_string += (":id:" + self.id)
+        print_string += (":valid:" + self.valid_flag)
+        print_string += (":matrix_type:" + self.matrix_type)
+        print_string += (":positions:" + format(self.positions))
+        print_string += (":threshold:" + format(self.threshold))
+        print_string += (":pseudoCount:" + format(self.pseudocount))
+        print_string += (":base_probability:" + format(self.base_probability))
+        print_string += (":matrix:" + self.matrix)
+        return print_string
 
 
 # ______ START METHODS RELATED TO THE CLASS BUT NOT TIED TO IT _____
@@ -221,36 +225,36 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
         also modify wing length on individual not max for all
     """
 
-    motifSet = motifArray()
+    motif_set = motifArray()
 
     # Open provided motif file
-    with open(motif_filename) as fileHandle:
+    with open(motif_filename) as file_handle:
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
         # 1 blank line separates each individual TF position weight matrix
         # reading files assumes {header,A,C,G,T,blankline} order
-        baseElement = motifElement()
+        base_element = motifElement()
 
         # index for line you are looking at in the motif matrix set (not file)
         i = 0
 
         # Iterate through file line by line.
-        for line in fileHandle:
+        for line in file_handle:
 
             # First line contains id and name
             if i == 0:
                 # must first remove brackets and split on whitespace
                 line = line.strip().strip('[').strip(']').split()
 
-                baseElement.id = line[0]
-                baseElement.name = line[1]
-                    #print(format(i) + ":" + baseElement.id + " " + baseElement.name)    # DEBUG LINE
+                base_element.id = line[0]
+                base_element.name = line[1]
+                    #print(format(i) + ":" + base_element.id + " " + base_element.name)    # DEBUG LINE
                 # If threshold given, use it for this matrix. Else, use default.
                 if (len(line) > 2):
-                    baseElement.threshold = float(line[2])
+                    base_element.threshold = float(line[2])
                 else:
-                    baseElement.threshold = default_th
+                    base_element.threshold = default_th
 
             # Order of position weight matrices is A,C,G,T. Remove brackets etc.
             elif i < 5:
@@ -258,26 +262,70 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
                 #     technically should modify index by found ACGT
                     #print(i)    # DEBUG LINE
                 line = line.strip().strip('A').strip('C').strip('G').strip('T').strip().strip('[').strip(']').split()
-                baseElement.matrix[i - 1] = line[0:]
+                base_element.matrix[i - 1] = line[0:]
 
             # add motif to list and continue (there are 2 newlines between motifs)
             else:
                 # check validity and set values passed
-                baseElement.checkValid()
-                baseElement.base_probability = base_pr
-                baseElement.pseudoCount = pc
+                base_element.check_valid()
+                base_element.base_probability = base_pr
+                base_element.pseudocount = pc
 
-                if (baseElement.validFlag):
+                if (base_element.valid_flag):
                     # calculate base occurence frequency by position
-                    baseElement.calculate_probabilities()
+                    base_element.calculate_probabilities()
 
                 # QQQ if invalid should it not include?
                 # append the current TF matrix to the motif set
-                motifSet.addMotif(baseElement)
+                motif_set.add_motif(base_element)
 
                 # reset the tracker variables
                 i = -1
-                baseElement.clear()
+                base_element.clear()
             i += 1
 
-    return (motifSet)
+    return motif_set
+
+def get_baseline_probs(baseline_f):
+    """
+    Read in baseline probabilities from a file name.
+
+    Args:
+        baseline_f a file containing a probability array of the form:
+            [ PrA PrC PrG PrT ]
+        Where PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)
+        note: file format, can technically separate by separated by arbitrary
+        strings of any whitespace characters
+        (space, tab, newline, return, formfeed). Only space tested.
+
+    Returns:
+        Array with probabilities as a float array of the form:
+        [ PrA, PrC, PrG, PrT ]
+    """
+
+    # Default baseline probability numbers (assumes all are equally likely)
+    bp_array = [0.25, 0.25, 0.25, 0.25]
+
+    # QQQ|YYY: note safer if check for invalid files everywhere
+    with open(baseline_f) as f:
+        try:
+            for line in f:
+                # remove commas, brackets, and whitespace on far left and right
+                line = line.strip().replace('[', '').replace(']', '').replace(',', '')
+                if line != "":
+                    line = line.split()
+                    for idx in range(4):
+                        bp_array[idx] = float(line[idx])
+                    return bp_array
+        except ValueError:
+            print(("**ERROR** Baseline probability file incorrectly formatted.\n" +
+                  "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+                  "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+                  "\tContinuing with default probabilities: " + format(bp_array)))
+            return bp_array
+
+        print(("**ERROR** Empty file found.\n" +
+              "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+              "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+              "\tContinuing with default probabilities: " + format(bp_array)))
+        return bp_array

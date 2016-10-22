@@ -7,7 +7,7 @@ intended to be imported with motifs.py and other for related functionality
 
 XXX|YYY: note incomplete
 """
-
+import re    # regular expression matching
 
 class sequenceArray:
     """
@@ -19,6 +19,27 @@ class sequenceArray:
     def __init__(self):
         self.seq = []        # array of sequence objects
         self.multivariant = []    # list of multivariant seq indices
+        return
+
+    def add_seq_defined(self, chromosome, position, reference_seq, variant_seq):
+        """
+        Create a sequenceElement object, assign values, then add to the set
+
+        Args:
+            chromosome number as a string e.g. "chr1",
+            position = position of the variant as an integer
+            reference_seq = reference sequence
+            variant_seq = variant sequence
+        Returns:
+            assigns argument inputs to element values, no return updates self
+
+        Note: if using samples likely safer to directly call
+            sequenceElement Functions so know correclty grouped samples
+        """
+        new_sequence_element = sequenceElement()
+        new_sequence_element.assign(chromosome, position, reference_seq, variant_seq)
+        self.add_seq(new_sequence_element)
+        return
 
     def add_seq(self, sequence_element_to_add):
         """add passed sequence element to the set"""
@@ -29,9 +50,11 @@ class sequenceArray:
         """add passed multivariant sequence element to the set"""
         self.add_seq(sequence_element_to_add)
         self.multivariant.append(len(self.seq) - 1)
+        return
 
     def clear(self):
         self.__init__()
+        return
 
     def delete_seq(self, seq_index):
         """remove passed element index from the set"""
@@ -116,6 +139,46 @@ class sequenceElement:
         self.seq_right_wing = sequenceStr()  # right wing sequence object
         self.samples = []     # set of sample (by index) for this sequence
                               # index from placement in file just like header
+
+    def assign(self, chromosome, position, reference_seq, variant_seq):
+        """
+        Assign values to the element variables
+
+        Args:
+            chromosome number as a string e.g. "chr1",
+            position = position of the variant as an integer
+            reference_seq = reference sequence
+            variant_seq = variant sequence
+        Returns:
+            assigns argument inputs to element values, no return updates self
+        """
+        self.name = chromosome
+        self.position = position
+        self.seq_var.seq = reference_seq
+        self.seq_ref.seq = variant_seq
+
+    def assign_samples(self, file_samples_array):
+        """
+        Convert passed sparse array into array of populated items only
+        Use in conjunction with read_line2sample_dictionaries()
+        Function must assume that array is the same size dictionary sample set
+
+        Args:
+            file_samples_array (technically a list)
+        Returns:
+            Sets self.samples
+        """
+
+        #file_samples_array = line_list[9:]    # example of input
+
+        # using regular expression to match on numbers to append sample set
+        # QQQ: maybe use lenght not .\. or convert to number or ? maybe faster
+        search_pattern = re.compile('[0-9]')    # faster to precompile
+        for index in range(len(file_samples_array)):
+            if re.search(search_pattern, file_samples_array[index]) is not None:
+                self.samples.append(index)
+
+        return
 
     def clear(self):
         self.__init__()
@@ -216,15 +279,6 @@ class sequenceStr:
         self.seq_rev_complement = ""    # 2. sequence reverse complement as string
         self.seq_rev_complement_int = []  # 3. sequence reverse complement as numbers
         # QQQ: make numpy arrays of Int?
-
-    def base_get_string(self, str_index):    # QQQ: drop?
-        """internal function used to return string to modify"""
-        if (str_index == 0):
-            return self.seq
-        elif (str_index == 2):
-            return self.seq_rev_complement
-        else:
-            return ""
 
     def convert2int(sequence):    # QQQ: convert to numpy array?
         """
@@ -329,7 +383,7 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):    # QQQ: any reas
     return str(ref_seq)
 
 
-def readLineToSampleDictionaries(headerString):
+def read_line2sample_dictionaries(headerString):
     """
     Parse header of VCF file to return dictionary of sample names found in file
 
