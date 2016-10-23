@@ -139,6 +139,7 @@ class sequenceElement:
         self.seq_right_wing = sequenceStr()  # right wing sequence object
         self.samples = []     # set of sample (by index) for this sequence
                               # index from placement in file just like header
+        self.vcf_line = ""    # vcf input line for variant
 
     def assign(self, chromosome, position, reference_seq, variant_seq):
         """

@@ -312,9 +312,10 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
 
         # Current peak (chromosome, start pos, end pos,
         #                transcription factor array, matrix match array)
+        #    when get_next_peak defines peak, matrix match array is undefined
         (pchr, psta, pend, ptfs, pmms) = peaks[idx]
 
-        # If next chromosome is reached in bed file [QQQ: should this occur before append]
+        # If next chromosome is reached in bed file [QQQ: should this occur before append?]
         if pchr != chrom:
             break
 
@@ -322,12 +323,11 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
             if pend >= pos:
                 motif_idx = 0
                 for motif_idx in range(len(matches)):
-                    match = matches[motif_idx]
-                    pmms.append(matches[motif_idx])
+                    pmms.append(matches[motif_idx])    # defines pmms for peaks
                     for trans_factor in ptfs:
                         # If the transcription factor (chip peak) name is the same as
                         # the matched motif name, note that there is a chip match
-                        if trans_factor == match.name:
+                        if trans_factor == matches[motif_idx].name:
                             # Motif match is verified by ChIP data
                             matches[motif_idx].chip_match = True
                 # Save with new value for pmms
@@ -733,9 +733,14 @@ with open(file_input) as vcf_handle:
         #variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
         new_sequence_element = sequenceElement()
         new_sequence_element.assign(line_list[0], int(line_list[1]), line_list[3], line_list[4])
-        variant_set.add_seq(new_sequence_element)
         # grab samples for variant
-        variant_set.assign_samples(line_list[9:])
+        new_sequence_element.assign_samples(line_list[9:])
+        # push full line (memory hog, but allows multivar computation
+        #    w/o significant code manipulation to track which line is current
+        #    already processed, etc.)
+        new_sequence_element.vcf_line = line
+        variant_set.add_seq(new_sequence_element)
+
 
 print("Finished importing variants(" + timeString() + ")\n")
 
@@ -743,6 +748,9 @@ if multivar_computation_flag:
     print("Start variant merge (" + timeString() + ").\n")
     variant_set.multivariant_list_build(multivar_distance)
     print("Finished variant merge(" + timeString() + ").\n")
+    # XXX: sort variant_set by the chromosome name? karotype? use chr_less
+    #     or rather just insert multivariant items into middle of list
+    #     before next chromosome elements
 
 print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 
@@ -754,12 +762,17 @@ print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 # chip tf array is an array of tf names
 # motif match tf array is an array of (motif name, vscore, rscore, strand)
 peak_buffer = []
-
+chromosome = ""    # processed chromosome
 for index in range(variant_set.length()):
     var_element = variant_set.seq[index]
 
     # QQQ: separate variant and multivariant test sets?
     #    test for and only analyze if index not in variant_set.multivariant
+
+    # Update previous, next, and current variables
+    if (chromosome != var_element.name):
+        chromosome = var_element.name
+        print("\tStart Analyzing new chromosome: " + chromosome + "...")
 
     # -- prepare the variant for processing
     # 1. Get reference sequence surrounding the variant from the reference file
@@ -798,6 +811,7 @@ for index in range(variant_set.length()):
     # Update ChIP buffer for current position
     # Update matches array with peak overlap data
     #    WARNING: XXX: match_peaks has not been heavily reviewed for validity
+    #    note: fileHan_chip is only read by children of match_peaks
     (peak_buffer, matches) = match_peaks(var_element.name, var_element.position,
                                          peak_buffer, fileHan_chip,
                                          matches, fileHan_out_chip,
@@ -814,43 +828,16 @@ for index in range(variant_set.length()):
     # Co-binding transcription factors currently not implemented
     cb_dict = None
 
-
-# ---------------------------------------------------------------------------
-# XXX stopped here!
-
-
     # Create the correct line in VCF format and print to file_output
-    update_vcf(line, matches, fileHan_output, options)
-
-        sys.stdout.flush()
-
-        # Update previous, next, and current variables
-        if (p_chr != chr):
-            print("\tAnalyzing " + chr + "...")
-
-        p_chr = chr
-        # position of the last base included
-        p_end = pos + len(ref_bases) - 1
-        # p_seq only holds sequence related to bases upstream of next variant
-        p_seq = surr_seq[:wing_l + len(var_bases)]
-
-        # pop(0) takes from the end of the queue (front of the sequence)
-        if (len(next_vars) > 0):
-            curr_var = next_vars.pop(0)
-        else:
-            break
+    update_vcf(var_element.vcf_line, matches, fileHan_output, options)
+    sys.stdout.flush()
 
     # Print remaining peaks
     for peak in peak_buffer:
         print_peak(peak, fileHan_out_chip, filter_bed)
 
 
-"""#debug motif matching
-    #wing = "AAAAAAAAAA"
-    #match_motifs(motifs,[0.25,0.25,0.25,0.25],wing+"GTCTGTGGTTT"+wing,len(wing))
-    #match_motifs(motifs,[0.25,0.25,0.25,0.25],wing+"CACGTG"+wing,len(wing))"""
-
-print("Done")
+print("Finished analyzing variants(" + timeString() + ").\n")
 
 # Close output files.
 fileHan_output.close()
