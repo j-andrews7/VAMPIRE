@@ -9,7 +9,7 @@ XXX|YYY: note incomplete
 """
 import re    # regular expression matching
 
-class sequenceArray:
+class SequenceArray:
     """
     this class is the array of sequence Elements
 
@@ -23,7 +23,7 @@ class sequenceArray:
 
     def add_seq_defined(self, chromosome, position, reference_seq, variant_seq):
         """
-        Create a sequenceElement object, assign values, then add to the set
+        Create a SequenceElement object, assign values, then add to the set
 
         Args:
             chromosome number as a string e.g. "chr1",
@@ -34,9 +34,9 @@ class sequenceArray:
             assigns argument inputs to element values, no return updates self
 
         Note: if using samples likely safer to directly call
-            sequenceElement Functions so know correclty grouped samples
+            SequenceElement Functions so know correclty grouped samples
         """
-        new_sequence_element = sequenceElement()
+        new_sequence_element = SequenceElement()
         new_sequence_element.assign(chromosome, position, reference_seq, variant_seq)
         self.add_seq(new_sequence_element)
         return
@@ -87,7 +87,7 @@ class sequenceArray:
 
     def multivariant_list_build(self, limit_mv_dist):
         """
-        create a new sequenceElement for joined variant set for each case:
+        create a new SequenceElement for joined variant set for each case:
             same chromosome + same sample + within limit_mv_dist --> join seq
         characters between variants drawn from reference genome fasta index
 
@@ -104,17 +104,17 @@ class sequenceArray:
         """
         print("XXX: function NOT implemented yet. Please check in later.")
         # multivar_str = var_seq1 + reference_space + var_seq2
-        # new_element = sequenceElement()
+        # new_element = SequenceElement()
         #    # grab name, position, snip from var_seq1
         # new_element.seq_var = multivar_str
-        # sequenceArray.add_seq(new_element)
+        # SequenceArray.add_seq(new_element)
         return
 
 
-class sequenceElement:
+class SequenceElement:
     """
     class used to define sequence objects built from
-    sequenceStr objects for separate variant, reference, and wing strings
+    SequenceStr objects for separate variant, reference, and wing strings
     Mark the samples for the variant by reading rest of the line
 
     How Used:
@@ -133,10 +133,10 @@ class sequenceElement:
         self.name = ""       # often the chromosome name
         self.position = -1   # position within genome (index)
         self.snip = True     # false if not a sequence snip
-        self.seq_var = sequenceStr()    # variable object for variant sequence
-        self.seq_ref = sequenceStr()    # variable object for reference seq.
-        self.seq_left_wing = sequenceStr()   # left wing sequence object
-        self.seq_right_wing = sequenceStr()  # right wing sequence object
+        self.seq_var = SequenceStr()    # variable object for variant sequence
+        self.seq_ref = SequenceStr()    # variable object for reference seq.
+        self.seq_left_wing = SequenceStr()   # left wing sequence object
+        self.seq_right_wing = SequenceStr()  # right wing sequence object
         self.samples = []     # set of sample (by index) for this sequence
                               # index from placement in file just like header
         self.vcf_line = ""    # vcf input line for variant
@@ -206,7 +206,7 @@ class sequenceElement:
             force_ref_match = (boolean) if true then force variant reference
                 bases to match FASTA reference
         WARNING: if force_ref_match = True and this function was called after
-            manipulation of non-seq parts of seq_ref sequenceStr object then
+            manipulation of non-seq parts of seq_ref SequenceStr object then
             those parts (int, rev_complement, rev_complement_int) are invalid.
             This function does not handle updating none string sequence parts.
         Returns:
@@ -307,7 +307,7 @@ class sequenceElement:
         return self.return_full_seq(self.seq_var.seq_rev_complement, wing_length)
 
 
-class sequenceStr:
+class SequenceStr:
     """
     create sequence string data structure used to build sequence elements
     all sequence strings are DNA sequence (ACGTN only)
@@ -425,7 +425,7 @@ def crop_from_right(sequence_string, crop_length):
     return sequence_string[:-crop_length]
 
 
-# QQQ: any reason to not be sequenceElement class method?
+# QQQ: any reason to not be SequenceElement class method?
 def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     """ Return sequence containing variant base + specified number
         of bases on each side from reference sequence file.
@@ -507,7 +507,7 @@ def sub_from_left(sequence_string, return_length):
     drops values at start ie chops off left side
     if return_length > length sequence_string --> does NOT pad
 
-    note: function was originally part of sequenceElement as sub_left_wing
+    note: function was originally part of SequenceElement as sub_left_wing
     """
     if (return_length <= 0):
         return ""
@@ -525,7 +525,7 @@ def sub_from_right(sequence_string, return_length):
     drops values at end ie chops off right side
     if return_length > length sequence_string --> does NOT pad
 
-    note: function was originally part of sequenceElement as sub_right_wing
+    note: function was originally part of SequenceElement as sub_right_wing
     """
     if (return_length <= 0):
         return ""

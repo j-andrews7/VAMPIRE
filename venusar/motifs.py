@@ -621,8 +621,7 @@ else:
 sys.stdout.flush()
 
 # Grab motif list from motif file.
-pdb.set_trace()
-print("Creating motif list from " + file_motif +
+print("Creating motif list from " + format(file_motif) +
       ", with pc=" + format(pc) +
       ", threshold=" + format(th) +
       ", bp=" + format(bp))
@@ -667,8 +666,8 @@ print("Completed fasta index @ " + timeString())
 print("Importing variants(" + timeString() + "). This may take a while.\n")
 sys.stdout.flush()
 
-# Open and Read VCF file: populates sequenceArray, assumes set fits in memory
-variant_set = sequenceArray()
+# Open and Read VCF file: populates SequenceArray, assumes set fits in memory
+variant_set = sequence.SequenceArray()
 with open(file_input) as vcf_handle:
 
     line = vcf_handle.readline()
@@ -732,7 +731,7 @@ with open(file_input) as vcf_handle:
         line_list = line.split("\t")
         # variant creation: add_seq_defined(chromosome, position, reference_seq, variant_seq):
         # variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
-        new_sequence_element = sequenceElement()
+        new_sequence_element = sequence.SequenceElement()
         new_sequence_element.assign(line_list[0], int(line_list[1]), line_list[3], line_list[4])
         # grab samples for variant
         new_sequence_element.assign_samples(line_list[9:])

@@ -5,9 +5,9 @@ import pytest
 # this is not a correct test file but worked for interactive testing
 import motif
 
-y = motif.motifArray()
+y = motif.MotifArray()
 for i in range(4):
-    x = motif.motifElement()
+    x = motif.MotifElement()
     x.positions = i
     y.add_motif(x)
 
@@ -32,7 +32,7 @@ y.max_positions
 y.max_positions_index
 y.length()
 
-x = motif.motifElement()
+x = motif.MotifElement()
 x.name = 'test'
 x.positions = 32
 
