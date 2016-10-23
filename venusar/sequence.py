@@ -182,6 +182,9 @@ class SequenceElement:
 
         # using regular expression to match on numbers to append sample set
         # QQQ: maybe use lenght not .\. or convert to number or ? maybe faster
+        # YYY: Maybe, so long as the output isn't changed. Could also do:
+        #    `any(char.isdigit() for char in file_samples_array[index])` if you 
+        #     don't want to precompile a regex for every call. No idea on speed.
         search_pattern = re.compile('[0-9]')    # faster to precompile
         for index in range(len(file_samples_array)):
             if re.search(search_pattern, file_samples_array[index]) is not None:
@@ -429,6 +432,7 @@ def crop_from_right(sequence_string, crop_length):
 
 
 # QQQ: any reason to not be SequenceElement class method?
+# YYY: Seems a natural place for it to go to me.
 def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     """ Return sequence containing variant base + specified number
         of bases on each side from reference sequence file.
@@ -479,6 +483,15 @@ def read_line2sample_dictionaries(headerString):
 
     reference: based on get_vcf_samples
     QQQ: may be better to use list and use var.index(name) to get index
+    YYY: This could be an issue if multiple columns are for the same sample.
+        This might occur if a user is using multiple methods to call their variants
+        and pooling the end results together (which is pretty common and something
+        we do as well.) Or they may be calling variants from multiple files for the 
+        same sample (think replicates or sequencing from different experiments).
+        Really, it doesn't matter, so long as we know which samples have the variant
+        and which don't. We'll have to create a specific format for the sample names
+        in the header so that users can still include extra info if they want (as you
+        can see in our input VCF).
     """
 
     samplesByName = {}

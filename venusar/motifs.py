@@ -155,6 +155,8 @@ def update_vcf(line, matches, output_fileHandle, options):
         if (not options.filter_vcf_motif and not options.filter_vcf_chip
             and not options.filter_vcf_no):
             print(line, file=output_fileHandle)    # QQQ: ide complains about syntax, but test ran in interactive mode; is this line bad?
+                                                   # YYY: Seems fine to me? What's the syntax error? Indentation is a little weird
+                                                   #     looking due to the multiline if statement, but should work fine.
         return
 
     outline = ""
@@ -518,6 +520,7 @@ parser.add_argument("-rf", "--force_ref_match", dest="force_ref_match",
 args = parser.parse_args()
 
 # Easier to use argument variables (YYY: why track duplicate variable names?)
+# YYY: Was probably just copy and pasted, tbh. No specific reason they were duped.
 file_input = args.input_file
 file_reference_genome = args.file_reference
 file_motif = args.file_motif
@@ -712,6 +715,9 @@ with open(file_input) as vcf_handle:
     # QQQ|YYY: push header line to global variable for samples, also modify
     #    info line as method above to all extension to calls and reduce file
     #    read?
+    # YYY: Not entirely sure what your question is asking here, but using a
+    #     method to add the INFO fields metadata in the header would be fine
+    #     and probably look a lot cleaner.
 
     # Process each variant
     eof_counter = 0
@@ -766,6 +772,9 @@ if multivar_computation_flag:
     # XXX: sort variant_set by the chromosome name? karotype? use chr_less
     #     or rather just insert multivariant items into middle of list
     #     before next chromosome elements
+    # YYY: Typically, we'd expect lexicographic order for input, it's the standard
+    #     order for sorting this data typically. I don't think we need to build in 
+    #     a sort, just tell users to sort their VCFs/bed files beforehand. 
 
 print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 
@@ -783,6 +792,8 @@ for index in range(variant_set.length()):
 
     # QQQ: separate variant and multivariant test sets?
     #    test for and only analyze if index not in variant_set.multivariant
+    # YYY: Seems this will likely be a necessity, at least to me. May be a way
+    #     around it, but I can't think of a better option off the top of my head.
 
     # Update previous, next, and current variables
     if (chromosome != var_element.name):

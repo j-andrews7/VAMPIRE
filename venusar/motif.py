@@ -114,6 +114,8 @@ class MotifArray:
             (rid, rname, rth, rmax_score, rmatch_seq, motif_index) = r_scored[idx]
             if (max_score >= th or rmax_score >= rth):
                 # XXX:QQQ: there needs to be a margin of error for th != rth; using 1%. appropriate?
+                # YYY: Not sure I understand, why is this necessary? If th is just the threshold
+                #     for the motif, shouldn't they be the same? Or am I missing something?
                 if (iden != rid or name != rname or abs((th - rth) / th) > .01):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
                           iden + " != " + rid +
@@ -232,12 +234,17 @@ class MotifArray:
         """
 
         # Get GC content [QQQ: faster to convert to upper then count?]
-        gc = v_seq.count('G') + v_seq.count('g')
-        gc += v_seq.count('C') + v_seq.count('c')
+        # YYY: Yes, actually, it is:
+        # python -m timeit -s "vseq = 'GACCtcagTc'" "vseq.count('g') + vseq.count('G')"
+        # 1000000 loops, best of 3: 0.384 usec per loop
+        # python -m timeit -s "vseq = 'GACCtcagTc'" "vseq=vseq.upper()" "vseq.count('G')"
+        # 1000000 loops, best of 3: 0.241 usec per loop
+        v_seq = v_seq.upper()
+        gc = v_seq.count('G') + v_seq.count('C')
         var_gc = gc / len(v_seq)
 
-        gc = r_seq.count('G') + r_seq.count('g')
-        gc += r_seq.count('C') + r_seq.count('c')
+        r_seq = r_seq.upper()
+        gc = r_seq.count('G') + r_seq.count('C')
         ref_gc = gc / len(r_seq)
 
         # Get list of motifs that matched
@@ -270,6 +277,22 @@ class MotifArray:
             # homotypic matches should not overlap the variant
             # because variant and reference wings match only compute once
             # wing size = size of the motif matched?
+            # YYY: Yeah, this part of the code was/is a mess. He was rushing towards the end
+            #     to try to take into account homotypic matches and local GC content. I 
+            #     couldn't really decipher what was going on and he had a lot of unused variables
+            #     and such left in here. It also didn't actually work quite right if I remember
+            #     correctly. Our default wing size was +/- 50 bp from the variant position to
+            #     look for homotypic matches, and yes, they should NOT overlap the variant.
+            #     I suppose they might, however, overlap each other, but that'll get confusing
+            #     in the output pretty quickly. If they overlap, best to just take the strongest 
+            #     match out of the overlaps and report that, I think.
+            #
+            #     GC content is pretty straightforward, just looking at % of bases in wings that are
+            #     G or C in variant and reference sequences. Genuine TF binding sites tend to have
+            #     slightly higher than normal GC content (usually ~40% in non-coding regions). 
+            #     If it was say, 55-60% in the local area of the variant, it might lend a bit of 
+            #     credence towards it being a genuine binding site. Just another piece of info.
+            #     In summary, the original code was iffy, at best. 
             if True:    # no overlap version
                 left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
                     match_motif.positions)
@@ -343,6 +366,7 @@ class MotifElement:
                                 # set by check_valid()
         self.valid_flag = False  # set by check_valid()
             # QQQ: store both types of matrix? memory hit is likely small
+            # YYY: Could, but probably not necessary since the counts aren't used again, right?
         self.threshold = 0
         self.base_probability = [] * 4   # base pair probability
         self.pseudocount = 0    # count number to add before probability calc
@@ -375,6 +399,8 @@ class MotifElement:
         t = self.matrix[3]
 
         # QQQ: change to use numpy methods --> faster?
+        # YYY: Might be. Python's timeit function might be of use for testing
+        #     small performance cases like this.
         # initialize output matrix of same size as input matrix
         new_m = [[0 for y in range(self.positions)] for x in range(4)]
 
@@ -450,6 +476,8 @@ class MotifElement:
         """
         compute the ... log likelihood ratio
         XXX: not in score motif says natural log but this is log2
+        YYY: Yeah, we want everything in log2. I think Ethan had converted everything to log2
+            and likely forgot to update the comment. Worth double checking though.
         YYY: note this could be outside the class
         """
         if (probability == 0):
@@ -563,6 +591,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
 
     XXX: QQQ: believe this should index motif length by TF.
         also modify wing length on individual not max for all
+    YYY: I think you're correct here.
     """
 
     motif_set = MotifArray()
@@ -616,6 +645,9 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
                     base_element.calculate_probabilities()
 
                 # QQQ if invalid should it not include?
+                # YYY: Probably not. In fact, I'd be worried about the rest of the set if one was invalid. 
+                #     I'd be tempted to throw and error and nuke the process and just tell the user to ensure
+                #     their motif file is appropriately formatted.
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
 
@@ -650,6 +682,7 @@ def get_baseline_probs(baseline_f):
     bp_array = [0.25, 0.25, 0.25, 0.25]
 
     # QQQ|YYY: note safer if check for invalid files everywhere
+    # YYY: Yeah, a function to just validate the input file formats is likely a good idea.
     with open(baseline_f) as f:
         try:
             for line in f:
