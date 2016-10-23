@@ -694,6 +694,8 @@ with open(file_input) as vcf_handle:
         info += "\n##INFO=<ID=MOTIFC,Number=.,Type=Character,Description="
         info += "\"Motif validated by ChIP (Y/N)\">"
 
+    print("\tfinished header read " + timeString())
+
     # Skip info lines
     while line.startswith("##"):
         # Print new info lines at the top of the ##INFO section
@@ -711,6 +713,7 @@ with open(file_input) as vcf_handle:
     #    read?
 
     # Process each variant
+    eofCounter = 0
     while True:
         # Reads in the next line of the vcf
         # adds the next variant's information to the element array object
@@ -718,8 +721,14 @@ with open(file_input) as vcf_handle:
         line = vcf_handle.readline()
 
         # skip empty and information lines
-        if line.startswith("##") or line == "":
+        if line.startswith("##"):
             continue
+        if line == "":
+            # handle while True infinite loop try to find End of File
+            if (eofCounter > 1):
+                break
+            else:
+                eofCounter += 1
 
         line = line.strip()
 
@@ -740,6 +749,7 @@ with open(file_input) as vcf_handle:
         #    already processed, etc.)
         new_sequence_element.vcf_line = line
         variant_set.add_seq(new_sequence_element)
+        print("\tadd element " + new_sequence_element.name + "::" + timeString())
 
 
 print("Finished importing variants(" + timeString() + ")\n")
