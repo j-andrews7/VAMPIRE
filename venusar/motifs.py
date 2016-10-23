@@ -731,7 +731,7 @@ with open(file_input) as vcf_handle:
         # -- process valid variant lines
         line_list = line.split("\t")
         # variant creation: add_seq_defined(chromosome, position, reference_seq, variant_seq):
-        #variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
+        # variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
         new_sequence_element = sequenceElement()
         new_sequence_element.assign(line_list[0], int(line_list[1]), line_list[3], line_list[4])
         # grab samples for variant
@@ -785,7 +785,7 @@ for index in range(variant_set.length()):
     var_element.assign_rev_complement()
     # 3. compute int version (XXX: after testing for speed up is confirmed)
 
-    print("Calculating:\n" + var_element.print_str() + "at(" + timeString() + ")\n"
+    print("Calculating:\n" + var_element.print_str() + "at(" + timeString() + ")\n")
 
     # -- building the list of MotifMatch objects
     # Calculate motif matches to variant sequence
@@ -817,7 +817,6 @@ for index in range(variant_set.length()):
                                          peak_buffer, fileHan_chip,
                                          matches, fileHan_out_chip,
                                          sorted_lex, filter_bed)
-
 
     """print("match_peaks returned "+str(len(peak_buffer))+" peak(s):")
     for peak in peak_buffer:
