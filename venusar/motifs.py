@@ -73,20 +73,9 @@ class Options_list:
         # potentially novel variants
         # -fn tag sets this to True
         self.filter_vcf_no = False
-        # Should lines in the chip (bed) output file be excluded
-        # if they don't match a motif?
-        # -fp sets this to True
-        self.filter_bed = False
         # Is a ChIP peak bed file present?
         # -ci <chip_file.bed> will make this True
         self.chip_present = False
-        # Are input files chr sorted lexicographically (or by karyotype order)?
-        # Input vcf file and chip bed file must be sorted the same way
-        # -sk sets this to True
-        self.sorted_lex = False
-
-
-
 
 
 def timeString():
@@ -100,7 +89,7 @@ def update_vcf(line, matches, output_fileHandle, options):
 
     Args:
         line = original vcf line (input file line)
-        matches = list of Motif_match objects
+        matches = list of MotifMatch objects
         output_fileHandle = output vcf file handle
         options = options list
 
@@ -211,7 +200,51 @@ def sublist_str(sublist, sig_figs):
     return ""
 
 
-def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options):
+def chr_less(chr_left, chr_right, sorted_lex):
+    """
+    Returns true if the left chromosome comes before the right or is the same.
+
+    Args:
+        chr_left = (string) the left chromsome being compared
+        chr_right = (string) the right chromosome being compared
+        sorted_lex = true if file sorted lexicographically (by string values)
+
+    Returns: Whether or not left chromosome comes before the right (boolean).
+    """
+
+    # True if the file is sorted lexicographically
+    # i.e. chr1 < chr11 < chr2 < chrX < chrY
+    if sorted_lex:
+        return (chr_left < chr_right)
+
+    # False if the file is sorted numerically
+    # i.e. chr1 < chr2 < chr11 < chrX < chrY
+    else:
+        left = chr_left[3:]    # assumes chromosome name is chr<other bits>
+        right = chr_right[3:]
+        try:
+            l_num = int(left)
+            try:
+                r_num = int(right)
+                return l_num < r_num
+            # Right chromosome is a string (chrX, chrY, chrTest, etc)
+            except:
+                # Left is a number and right is a string
+                # Numbers are sorted before strings (chr1 < chrX)
+                return True
+        # Left number is a string if get to ValueError exception
+        except ValueError:
+            try:
+                r_num = int(left)
+                # Left is a string and right is a number
+                # Numbers are sorted before strings (chrX !< chr1)
+                return False
+            # Both are strings, sort lexicographically
+            except ValueError:
+                return chr_left < chr_right
+
+
+def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_lex, filter_bed ):
     """
     Returns an array of peaks that match the current chromosome and position.
     Updates the output_fileHandle if not None.
@@ -231,7 +264,8 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options)
         matches = list of motif matches as tuples of the form:
             (name, variant score, reference score, ChIP match)
         output_fileHandle = ChIP output bed file to be printed to.
-        options = Options_list object
+        sorted_lex = True if sorted lexigraphically (by character strings)
+        filter_bed = if true exclude non matched motif(s) in ChiP output
 
     Returns: Peak buffer tuple of the form ( overlapping peak array, next peak )
         Array of peaks that overlap the current chromosome and position
@@ -240,13 +274,13 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options)
     """
 
     if chip_fh is None:
-        return ([], matches)
+        return (peaks, matches)
 
-    # Get rid of peaks that are upstream of the current chromosome
+    # Get rid of peaks that are upstream (left of) of the current chromosome
     idx = 0
-    while idx < len(peaks) and chr_less(peaks[idx][0], chrom, options):
+    while idx < len(peaks) and chr_less(peaks[idx][0], chrom, sorted_lex):
         # If the chromosome doesn't match, output the line and keep searching
-        print_peak(peaks[idx], output_fileHandle, options)
+        print_peak(peaks[idx], output_fileHandle, filter_bed )
         idx += 1
 
     # peak at idx will be included and the rest will be removed
@@ -254,7 +288,7 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options)
 
     # If previous peaks were not from correct chromosome, get there
     if (len(peaks) == 0):
-        new_peak = get_peak_at(chrom, pos, chip_fh, output_fileHandle, options)
+        new_peak = get_peak_at(chrom, pos, chip_fh, output_fileHandle, sorted_lex, filter_bed)
         # If end of file is reached
         if (new_peak is None):
             return ([], matches)
@@ -276,11 +310,11 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options)
 
             peaks.append(n_peak)
 
-        # Current peak (chromosome, start pos, end pos, transcription factor array,
-        # matrix match array)
+        # Current peak (chromosome, start pos, end pos,
+        #                transcription factor array, matrix match array)
         (pchr, psta, pend, ptfs, pmms) = peaks[idx]
 
-        # If next chromosome is reached in bed file
+        # If next chromosome is reached in bed file [QQQ: should this occur before append]
         if pchr != chrom:
             break
 
@@ -301,7 +335,7 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, options)
             # Otherwise both are before pos, so remove that peak and continue
             # This should only ever happen when idx is 0... but still
             else:
-                print_peak(peaks[idx], output_fileHandle, options)
+                print_peak(peaks[idx], output_fileHandle, filter_bed)
                 peaks = peaks[0:idx] + peaks[idx + 1:]
                 idx -= 1
         # Otherwise peak start is after the variant position, so stop
@@ -348,7 +382,7 @@ def get_next_peak(opened_file):
     return (chrom, start, end, tf_array, [])
 
 
-def get_peak_at(chrom, pos, chip_fh, out_fh, options):
+def get_peak_at(chrom, pos, chip_fh, out_fh, sorted_lex, filter_bed):
     """
     Get the first peak where the end point of the peak is past the input pos.
     Requires that chip_fh is sorted the same way is the vcf input file.
@@ -359,7 +393,8 @@ def get_peak_at(chrom, pos, chip_fh, out_fh, options):
         pos = the new position to get to
         chip_fh = an already open input .bed file handle
         out_fh = an already open output file (to be printed to). May be None.
-        options = object from Options_list class
+        sorted_lex = True if sorted lexigraphically (by character strings)
+        filter_bed = if true exclude non matched motif(s) in ChiP output
 
     Returns:
         The first peak from chip_fh that is the same chromosome as chr
@@ -383,11 +418,11 @@ def get_peak_at(chrom, pos, chip_fh, out_fh, options):
                 # sys.stdout.flush()
                 return peak
             else:
-                print_peak(peak, out_fh, options)
+                print_peak(peak, out_fh, filter_bed)
 
         # If the chromosome is too low and there is an outfile, print
-        elif chr_less(p_chr, chrom, options):
-            print_peak(peak, out_fh, options)
+        elif chr_less(p_chr, chrom, sorted_lex):
+            print_peak(peak, out_fh, filter_bed)
         # If we have passed the chromosome
         else:
             return peak
@@ -398,7 +433,7 @@ def get_peak_at(chrom, pos, chip_fh, out_fh, options):
     return None
 
 
-def print_peak(peak, fileHandle, options):
+def print_peak(peak, fileHandle, filter_bed):
     """
     Prints the peak to the given file handle (or exits if no file is given)
 
@@ -409,7 +444,8 @@ def print_peak(peak, fileHandle, options):
             motif match tf array is an array of (motif name, vscore, rscore, strand)
         fileHandle = the file to print to. This file should already be opened.
             If this file is None, nothing will happen.
-        options = Options_list object
+        filter_bed = if true exclude lines in chip (bed) output file if they
+                     don't match a motif
 
     Returns: Nothing
     """
@@ -419,7 +455,7 @@ def print_peak(peak, fileHandle, options):
     (chrom, start, end, c_array, mm_array) = peak
 
     # If there are no motif matches and filtering is on, do not print this peak
-    if options.filter_bed and len(mm_array) == 0:
+    if filter_bed and len(mm_array) == 0:
         return
 
     line = chrom + '\t' + str(start) + '\t' + str(end) + '\t'
@@ -443,52 +479,6 @@ def print_peak(peak, fileHandle, options):
     print(line, file=fileHandle)
 
     return
-
-
-def chr_less(chr_left, chr_right, options):
-    """
-    Returns true if the left chromosome comes before the right or is the same.
-
-    Args:
-        chr_left = (string) the left chromsome being compared
-        chr_right = (string) the right chromosome being compared
-        options = Options_list object
-
-    Returns: Whether or not the left chromosome comes before the right (boolean).
-    """
-
-    # True if the file is sorted lexicographically
-    # i.e. chr1 < chr11 < chr2 < chrX < chrY
-    if options.sorted_lex:
-        return (chr_left < chr_right)
-
-    # False if the file is sorted numerically
-    # i.e. chr1 < chr2 < chr11 < chrX < chrY
-    else:
-        left = chr_left[3:]
-        right = chr_right[3:]
-        try:
-            l_num = int(left)
-            try:
-                r_num = int(right)
-                return l_num < r_num
-            # Right chromosome is a string (chrX, chrY, chrTest, etc)
-            except:
-                # Left is a number and right is a string
-                # Numbers are sorted before strings (chr1 < chrX)
-                return True
-        # Left number is a string
-        except ValueError:
-            try:
-                r_num = int(left)
-                # Left is a string and right is a number
-                # Numbers are sorted before strings (chrX !< chr1)
-                return False
-            # Both are strings, sort lexicographically
-            except ValueError:
-                return chr_left < chr_right
-
-
 
 """
     ---- START OF MAIN ----
@@ -549,7 +539,10 @@ else
 options = Options_list()
 options.filter_vcf_motif = (args.filter_motif is not None)
 
-options.sorted_lex = (args.kary_sort is None)
+# Are input files chr sorted lexicographically (or by karyotype order)?
+# Input vcf file and chip bed file must be sorted the same way
+# -sk sets this to True (means sorted lexicographically)
+sorted_lex = (args.kary_sort is None)
 
 print("Run started at:" + timeString())
 
@@ -577,8 +570,12 @@ fileHan_out_chip = None
 if (file_chip is not None):
     options.chip_present = True
 
-    # Process chip related options
-    options.filter_bed = (args.filter_co is not None)
+    # -- Process chip related options
+    # Should lines in the chip (bed) output file be excluded
+    # if they don't match a motif?
+    # -fp sets this to True
+    filter_bed = (args.filter_co is not None)
+
     options.filter_vcf_chip = (args.filter_chip is not None)
     options.filter_vcf_no = (args.filter_novel is not None)
 
@@ -587,7 +584,7 @@ if (file_chip is not None):
     if (file_output_chip is not None):
         opt_args += "    ChIP output file: " + file_output_chip + "\n"
         fileHan_out_chip = open(file_output_chip, "w")
-        if (options.filter_bed):
+        if (filter_bed):
             opt_args += "    Filter output ChIP bed for motif matches? Yes\n"
         if (options.filter_vcf_chip):
             opt_args += "    Filter output vcf for ChIP peak overlap? Yes\n"
@@ -607,7 +604,7 @@ if (file_baseline_prob is not None):
 if (options.filter_vcf_motif):
     opt_args += "    Filter output vcf for motif matches? Yes\n"
 
-if (not options.sorted_lex):
+if (not sorted_lex):
     opt_args += "    Input vcf and Input ChIP bed are sorted by karyotype\n"
 # XXX: add multivariant option output and force reference
 print(opt_args)    # debug outputs
@@ -750,6 +747,14 @@ if multivar_computation_flag:
 print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 
 # ---------------------------------------------------------------------------
+
+# Queue of ChIP peaks that overlap the current variant
+# Will contain peaks as a tuple of the form
+# (chr, start, stop, chip tf array, motif match tf array)
+# chip tf array is an array of tf names
+# motif match tf array is an array of (motif name, vscore, rscore, strand)
+peak_buffer = []
+
 for index in range(variant_set.length()):
     var_element = variant_set.seq[index]
 
@@ -768,69 +773,54 @@ for index in range(variant_set.length()):
 
     print("Calculating:\n" + var_element.print_str() + "at(" + timeString() + ")\n"
 
+    # -- building the list of MotifMatch objects
     # Calculate motif matches to variant sequence
     ref_seq = var_element.return_full_ref_seq(wing_l)
     var_seq = var_element.return_full_var_seq(wing_l)
     plusmatch = motif_set.motif_match(bp, ref_seq, var_seq, wing_l)
-    # Add local environment data
-    process_local_env(motif_set, bp, plusmatch, None, var_seq, ref_seq, wing_l)
+    #     plusmatch returns an list of MotifMatch objects
+    # Add local environment data: XXX: new version guessed intent see code
+    #    the process_local_env function never returned anything before
+    #    the individual iteration output was occumulated in a transient variable
+    #    and the output (presuming ple had any) was not previously assigned
+    #
+    plusmatch = motif_set.process_local_env(bp, plusmatch, var_element, None, var_seq, ref_seq)
 
     # Calculate motif matches to reverse complement
     ref_seq_rc = var_element.return_full_ref_seq_reverse_complement(wing_l)
     var_seq_rc = var_element.return_full_var_seq_reverse_complement(wing_l)
     minusmatch = motif_set.motif_match(bp, ref_seq_rc, var_seq_rc, wing_l)
     # Add local environment data
-    process_local_env(motif_set, bp, minusmatch, None, r_varseq, r_refseq, wing_l)
+    minusmatch = motif_set.process_local_env(bp, minusmatch, var_element, None, var_seq_rc, ref_seq_rc)
 
     matches = plusmatch + minusmatch
 
+    # Update ChIP buffer for current position
+    # Update matches array with peak overlap data
+    #    WARNING: XXX: match_peaks has not been heavily reviewed for validity
+    (peak_buffer, matches) = match_peaks(var_element.name, var_element.position,
+                                         peak_buffer, fileHan_chip,
+                                         matches, fileHan_out_chip,
+                                         sorted_lex, filter_bed)
 
 
-    # Queue of ChIP peaks that overlap the current variant
-    # Will contain peaks as a tuple of the form
-    # (chr, start, stop, chip tf array, motif match tf array)
-    # chip tf array is an array of tf names
-    # motif match tf array is an array of (motif name, vscore, rscore, strand)
-    peak_buffer = []
+    """print("match_peaks returned "+str(len(peak_buffer))+" peak(s):")
+    for peak in peak_buffer:
+        (pchr, psta, pend, ptfs, pmms) = peak
+        print(pchr+":"+str(psta)+"-"+str(pend)+" tfs:"+str(len(ptfs))+
+            " mms:"+str(len(pmms)))
+    print()"""
+
+    # Co-binding transcription factors currently not implemented
+    cb_dict = None
 
 
 # ---------------------------------------------------------------------------
 # XXX stopped here!
 
 
-
-
-
-
-
-
-    # Process each variant
-    while True:
-
-
-
-
-        # print("calling match_peaks for variant "+chr+":"+str(pos))
-        # sys.stdout.flush()
-
-        # Update ChIP buffer for current position
-        # Update matches array with peak overlap data
-        (peak_buffer, matches) = match_peaks(chr, pos, peak_buffer,
-                                             fileHan_chip,
-                                             matches, fileHan_out_chip, options)
-
-        """print("match_peaks returned "+str(len(peak_buffer))+" peak(s):")
-        for peak in peak_buffer:
-            (pchr, psta, pend, ptfs, pmms) = peak
-            print(pchr+":"+str(psta)+"-"+str(pend)+" tfs:"+str(len(ptfs))+
-                " mms:"+str(len(pmms)))
-        print()"""
-
-        # Co-binding transcription factors currently not implemented
-        cb_dict = None
-
-        # Create the correct line in VCF format and print to file_output
-        update_vcf(line, matches, fileHan_output, options)
+    # Create the correct line in VCF format and print to file_output
+    update_vcf(line, matches, fileHan_output, options)
 
         sys.stdout.flush()
 
@@ -852,7 +842,7 @@ for index in range(variant_set.length()):
 
     # Print remaining peaks
     for peak in peak_buffer:
-        print_peak(peak, fileHan_out_chip, options)
+        print_peak(peak, fileHan_out_chip, filter_bed)
 
 
 """#debug motif matching
