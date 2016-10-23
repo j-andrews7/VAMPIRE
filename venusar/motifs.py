@@ -83,6 +83,7 @@ def timeString():
     """
     return time.strftime('%Y%m%d.%H:%M:%S')
 
+
 def update_vcf(line, matches, output_fileHandle, options):
     """
     Updates the output file with the output in the correct variant call format
@@ -151,9 +152,9 @@ def update_vcf(line, matches, output_fileHandle, options):
     # If there are no matches, print the line unchanged or filter it out (return
     # without printing)
     if to_be_printed == 0:
-        if (not options.filter_vcf_motif and not options.filter_vcf_chip and
-                not options.filter_vcf_no):
-            print(line, file=output_fileHandle)
+        if (not options.filter_vcf_motif and not options.filter_vcf_chip
+            and not options.filter_vcf_no):
+            print(line, file=output_fileHandle)    # QQQ: ide complains about syntax, but test ran in interactive mode; is this line bad?
         return
 
     outline = ""
@@ -244,7 +245,7 @@ def chr_less(chr_left, chr_right, sorted_lex):
                 return chr_left < chr_right
 
 
-def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_lex, filter_bed ):
+def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_lex, filter_bed):
     """
     Returns an array of peaks that match the current chromosome and position.
     Updates the output_fileHandle if not None.
@@ -280,7 +281,7 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
     idx = 0
     while idx < len(peaks) and chr_less(peaks[idx][0], chrom, sorted_lex):
         # If the chromosome doesn't match, output the line and keep searching
-        print_peak(peaks[idx], output_fileHandle, filter_bed )
+        print_peak(peaks[idx], output_fileHandle, filter_bed)
         idx += 1
 
     # peak at idx will be included and the rest will be removed
@@ -526,13 +527,13 @@ file_chip = args.chip_file
 file_output_chip = args.chip_out_file
 pc = float(args.pseudocounts)
 ws = int(args.wing_size)
-if (args.multi_var is None)
+if (args.multi_var is None):
     multivar_computation_flag = False
-else
+else:
     multivar_computation_flag = True
     if (int(args.multi_var) == -1):
         multivar_distance = ws
-    else
+    else:
         multivar_distance = int(args.multi_var)
 
 # Options list. Easier to pass in methods or use in code updates.
