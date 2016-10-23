@@ -218,6 +218,9 @@ class SequenceElement:
 
         # check that reference sequence matches vcf's sequence for position
         returned_ref_b = surr_seq[wing_length:-wing_length]
+        print(("sequence: " + surr_seq + "\n\t" + returned_ref_b + "\n" +
+            "\tleft: " + sub_from_left(surr_seq, wing_length) + "\n" +
+            "\tright: " + sub_from_right(surr_seq, wing_length) ))
         if self.seq_ref.seq.upper() != returned_ref_b.upper():
             print(("**ERROR**\nVCF reference sequence for " +
                 self.name + " pos " + str(self.position) + ":\n\t\"" +
@@ -245,7 +248,7 @@ class SequenceElement:
         print_string += "\tright_wing: " + self.seq_right_wing.seq + "\n"
         return print_string
 
-    def return_full_seq(self, sequence, wing_length):
+    def return_full_seq(self, sequence_str, wing_length):
         """
         return sequence to process with wings attached. Uses sub_from_left and
         sub_from_right methods to reduce wing sizes to requested length.
@@ -257,11 +260,11 @@ class SequenceElement:
             string of left wing + sequence string + right wings
         """
         build_seq = sub_from_left(self.seq_left_wing.seq, wing_length)
-        build_seq += sequence
+        build_seq += sequence_str
         build_seq += sub_from_right(self.seq_right_wing.seq, wing_length)
         return build_seq
 
-    def return_full_seq_reverse_complement(self, sequence, wing_length):
+    def return_full_seq_reverse_complement(self, sequence_str, wing_length):
         """
         return sequence to process with wings attached. Uses sub_from_left and
         sub_from_right methods to reduce wing sizes to requested length.
@@ -274,7 +277,7 @@ class SequenceElement:
             string of right wing + sequence string + left wings
         """
         build_seq = sub_from_right(self.seq_right_wing.seq_rev_complement, wing_length)
-        build_seq += sequence
+        build_seq += sequence_str
         build_seq += sub_from_left(self.seq_left_wing.seq_rev_complement, wing_length)
         return build_seq
 
@@ -321,7 +324,7 @@ class SequenceStr:
         self.seq_rev_complement_int = []  # sequence reverse complement as numbers
         # QQQ: make numpy arrays of Int?
 
-    def convert2int(sequence):    # QQQ: convert to numpy array?
+    def convert2int(self, sequence_str):    # QQQ: convert to numpy array?
         """
         convert the sequence from character to integer values
             A = 1
@@ -332,15 +335,15 @@ class SequenceStr:
         Args: string
         Returns: array of numbers same length as string
         """
-        sequence_int = [] * len(sequence)
-        for idx in range(len(sequence)):
-            if sequence[idx].upper() == 'A':
+        sequence_int = [0] * len(sequence_str)
+        for idx in range(len(sequence_str)):
+            if sequence_str[idx].upper() == 'A':
                 sequence_int[idx] = 1
-            elif sequence[idx].upper() == 'C':
+            elif sequence_str[idx].upper() == 'C':
                 sequence_int[idx] = 2
-            elif sequence[idx].upper() == 'G':
+            elif sequence_str[idx].upper() == 'G':
                 sequence_int[idx] = 3
-            elif sequence[idx].upper() == 'T':
+            elif sequence_str[idx].upper() == 'T':
                 sequence_int[idx] = 4
             else:
                 sequence_int[idx] = 0

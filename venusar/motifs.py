@@ -530,11 +530,12 @@ ws = int(args.wing_size)
 if (args.multi_var is None):
     multivar_computation_flag = False
 else:
-    multivar_computation_flag = True
     if (int(args.multi_var) == -1):
         multivar_distance = ws
+        multivar_computation_flag = False
     else:
         multivar_distance = int(args.multi_var)
+        multivar_computation_flag = True
 
 # Options list. Easier to pass in methods or use in code updates.
 options = Options_list()
@@ -713,22 +714,26 @@ with open(file_input) as vcf_handle:
     #    read?
 
     # Process each variant
-    eofCounter = 0
+    eof_counter = 0
     while True:
         # Reads in the next line of the vcf
         # adds the next variant's information to the element array object
 
         line = vcf_handle.readline()
 
+        if line is None:    # stop infinite loop
+            print('debug: stop file read with count' + format(eof_counter))
+            break
+
         # skip empty and information lines
         if line.startswith("##"):
             continue
         if line == "":
             # handle while True infinite loop try to find End of File
-            if (eofCounter > 1):
+            if (eof_counter > 1):
                 break
             else:
-                eofCounter += 1
+                eof_counter += 1
 
         line = line.strip()
 
