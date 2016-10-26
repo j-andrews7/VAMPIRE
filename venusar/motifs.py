@@ -718,6 +718,7 @@ with open(file_input) as vcf_handle:
     # YYY: Not entirely sure what your question is asking here, but using a
     #     method to add the INFO fields metadata in the header would be fine
     #     and probably look a lot cleaner.
+    # CCC-WK: note has to do with whether it used again or not, best way to handle
 
     # Process each variant
     eof_counter = 0
@@ -775,6 +776,11 @@ if multivar_computation_flag:
     # YYY: Typically, we'd expect lexicographic order for input, it's the standard
     #     order for sorting this data typically. I don't think we need to build in 
     #     a sort, just tell users to sort their VCFs/bed files beforehand. 
+    # CCC-WK: not user input. the sort has to do with creating multivariants from the 
+    #     set of individual inputs. The program is doing work for the user, by
+    #     combining variants into super-variants, see email discussion.
+    #     so there needs to be a decision on where in the order to put
+    #     the super-variants for processing. also how to annotate in output
 
 print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 

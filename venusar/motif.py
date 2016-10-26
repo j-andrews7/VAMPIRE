@@ -113,10 +113,12 @@ class MotifArray:
             (iden, name, th, max_score, match_seq, motif_index) = scored[idx]
             (rid, rname, rth, rmax_score, rmatch_seq, motif_index) = r_scored[idx]
             if (max_score >= th or rmax_score >= rth):
-                # XXX:QQQ: there needs to be a margin of error for th != rth; using 1%. appropriate?
-                # YYY: Not sure I understand, why is this necessary? If th is just the threshold
+                # ZZZ:QQQ: there needs to be a margin of error for th != rth; using 1%. appropriate?
+                # CCC1: Not sure I understand, why is this necessary? If th is just the threshold
                 #     for the motif, shouldn't they be the same? Or am I missing something?
-                if (iden != rid or name != rname or abs((th - rth) / th) > .01):
+                # CCC2WK: when I wrote the comment I was thinking of them as computed values.
+                #         XXX. remove threshold margin of error comments in next push
+                if (iden != rid or name != rname or th == rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
                           iden + " != " + rid +
                           " or " + name + " != " + rname +
@@ -233,8 +235,8 @@ class MotifArray:
 
         """
 
-        # Get GC content [QQQ: faster to convert to upper then count?]
-        # YYY: Yes, actually, it is:
+        # Get GC content 
+        # ZZZ: faster to convert to upper then count? Yes, actually, it is:
         # python -m timeit -s "vseq = 'GACCtcagTc'" "vseq.count('g') + vseq.count('G')"
         # 1000000 loops, best of 3: 0.384 usec per loop
         # python -m timeit -s "vseq = 'GACCtcagTc'" "vseq=vseq.upper()" "vseq.count('G')"
@@ -277,7 +279,7 @@ class MotifArray:
             # homotypic matches should not overlap the variant
             # because variant and reference wings match only compute once
             # wing size = size of the motif matched?
-            # YYY: Yeah, this part of the code was/is a mess. He was rushing towards the end
+            # CCC-JA: Yeah, this part of the code was/is a mess. He was rushing towards the end
             #     to try to take into account homotypic matches and local GC content. I 
             #     couldn't really decipher what was going on and he had a lot of unused variables
             #     and such left in here. It also didn't actually work quite right if I remember
@@ -293,6 +295,7 @@ class MotifArray:
             #     If it was say, 55-60% in the local area of the variant, it might lend a bit of 
             #     credence towards it being a genuine binding site. Just another piece of info.
             #     In summary, the original code was iffy, at best. 
+            # CCC-WK: code as written makes no attempt to check for wings overlapping
             if True:    # no overlap version
                 left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
                     match_motif.positions)
@@ -366,7 +369,7 @@ class MotifElement:
                                 # set by check_valid()
         self.valid_flag = False  # set by check_valid()
             # QQQ: store both types of matrix? memory hit is likely small
-            # YYY: Could, but probably not necessary since the counts aren't used again, right?
+            # CCC-JA: Could, but probably not necessary since the counts aren't used again, right?
         self.threshold = 0
         self.base_probability = [] * 4   # base pair probability
         self.pseudocount = 0    # count number to add before probability calc
@@ -399,8 +402,10 @@ class MotifElement:
         t = self.matrix[3]
 
         # QQQ: change to use numpy methods --> faster?
-        # YYY: Might be. Python's timeit function might be of use for testing
+        # CCC-JA: Might be. Python's timeit function might be of use for testing
         #     small performance cases like this.
+        # CCC-WK: the numpy reference is an extension of what I plan to do with convert2int
+        #	the use not the conversion would get faster.
         # initialize output matrix of same size as input matrix
         new_m = [[0 for y in range(self.positions)] for x in range(4)]
 
