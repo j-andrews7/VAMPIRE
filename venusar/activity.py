@@ -106,7 +106,13 @@ class Variant(object):
         for field in self.info_fields:
             if field != "INDEL":  # Take care of INDEL flag.
                 field_info = field.split("=")
-                name, data = (field_info[0], field_info[1])
+
+                # TODO - This is a hack work around a bug that's messing up the MOTIFN field in tf_expression.py.
+                # Go back and actually figure out why the MOTIFN field is getting split up sometimes.
+                try:
+                    name, data = (field_info[0], field_info[1])
+                except:
+                    name, data = "BROKEN", None
             else:
                 name, data = "INDEL", None
 
@@ -147,7 +153,7 @@ class Variant(object):
         for item in self.loci:
             loci_idens.append(item.iden)
             pass_thresh.append(item.num_pass_thresh[self])
-            tmp = "(" + ",".join([str(x) for x in item.z_scores[self][0]]) + ")"
+            tmp = "(" + ",".join([str(round(x, 4)) for x in item.z_scores[self][0]]) + ")"
             z_scores.append(tmp)
         info.insert(0, "SAMPTHN=" + ",".join([str(x) for x in pass_thresh]))
         info.insert(0, "LOCIVZ=" + ",".join(z_scores))
@@ -283,14 +289,14 @@ class Locus(object):
             all_var_samps = ",".join(item.var_samples)
             num_all_var_samps = len(item.var_samples)
             all_ref_samps = ",".join(item.ref_samples)
-            num_all_ref_samps = len(item.var_samples)
+            num_all_ref_samps = len(item.ref_samples)
 
             # Handle z_scores.
             scores_out = []
             scores = self.z_scores[item]
             for x in range(len(val_var_samps)):
                 samp = val_var_samps[x]
-                score = scores[x]
+                score = round(scores[x][x], 4)
                 scores_out.append(samp + "=" + str(score))
 
             out_line.append(",".join(scores_out))
@@ -477,6 +483,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
         vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
 
+        print(line, file=output_vcf)
+
         print("Comparing samples in VCF file and activity file to find commonalities.\n")
         print("VCF samples: ", *vcf_samples, end="\n\n")
         print("Activity samples: ", *list(act_samps.keys()), end="\n\n")
@@ -520,7 +528,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
                 loc.calc_z_score(ref_act_indices, var_act_indices, current_var, thresh)
                 current_var.loci.append(loc)  # Add Locus object to given Variant.
                 loci_ovlp_var[x] = loc
-                loci_out.append(loc)  # These will be used for eventual BED output.
+                if loc not in loci_out:
+                    loci_out.append(loc)  # These will be used for eventual BED output.
 
             vcf_out_line = current_var.get_variant_output(include_vcf)
 
@@ -531,7 +540,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
     print("Filtering loci and creating BED output.")
     print("CHR", "START", "END", "ID", "VARIANT", "Z_SCORES", "NUM_PASS_THRESH", "COMMON_VAR_SAMPS",
-          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "ALL_REF_SAMPS",
+          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "NUM_ALL_VAR_SAMPS",
+          "ALL_REF_SAMPS", "NUM_COMMON_REF_SAMPS"
           "MOTIF_INFO", sep="\t", file=output_bed)
     for item in loci_out:
 
