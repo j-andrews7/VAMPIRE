@@ -10,166 +10,70 @@ Args:
     -i (str) = Name of vcf file to process.
     -e (str) = Name of expression file.
     -ov (str) = Name of vcf output file.
+
+    # TODO - Implement bed output.
     -ob (str) = Name of bed output file that will be gene-based.
+
     -size (int, optional) = An integer to define the distance from the center or edges of the
         loci to look for gene overlap. 50 kb by default.
-    -intergenic (bool, optional) = If included, will not print variants that directly overlap with a gene in
+
+    # TODO - Implement this. Should really use an annotation file that has exons for each gene so that
+    #   intronic REs are also included.
+    -nc (bool, optional) = If included, will not print variants that directly overlap with a gene in
         the expression file to output. Good for regulatory element searches. False by default.
-    -th (int, optional) = If given, will exclude genes that are below this threshold for all
+
+    -th (int, optional) = Z-score magnitude threshold that must be met for variants/loci to be reported to output.
+        Default is 0, so all loci a variant overlaps will be reported. 0 by default.
+    -eth (int, optional) = If given, will exclude genes that are below this threshold for all
         samples in the expression file. Good for excluding genes that aren't expressed. 0 by default.
 """
 # TODO - This is very incomplete.
 import argparse
+import time
+from statistics import mean, stdev
 
 
-# TODO - Scratch this class and use those from activity.py instead.
-class Vcf:
-
-    def __init__(self, sample_name, input_path, output_path):
-        self.name = sample_name
-        self.vcf_f = open(input_path)
-        self.matches = []
-        if output_path is not None:
-            self.out_f = open(output_path, "w")
-        else:
-            self.out_f = None
-
-        # Initialize current variant (aka current line).
-        line = self.vcf_f.readline()
-        info_needed = True
-        info = ('##INFO=<ID=GZEXP,Number=.,Type=Float,Description="Gene z-score for Expression ',
-                '(variant expression vs reference expression)">')
-
-        # Skip info lines.
-        while line.startswith("#"):
-            # Print new info lines at the top of the ##INFO section.
-            if self.out_f is not None:
-                if info_needed and line.startswith("##INFO"):
-                    print(info, file=self.out_f)
-                    info_needed = False
-                print(line, file=self.out_f, end="")
-            line = self.vcf_f.readline()
-
-        # Current variant.
-        self.parse_line(line)
-
-    # Outputs old variant if output path is given.
-    def next_variant(self, options):
-        if self.out_f is not None:
-            self.output_var(options)
-
-        self.matches = []
-        line = self.vcf_f.readline()
-
-        # skip info lines-
-        while line.startswith("#"):
-            line = self.vcf_f.readline()
-
-        self.parse_line(line)
-
-    # Remember to check if self.out_f is present before calling output_var.
-    def output_var(self, options):
-
-        # If the filter vcf option is on, don't print variants that don't
-        # have an expression z-score (above the threshold if present).
-        if options.filter_vcf and len(self.matches) == 0:
-            return
-
-        line_list = self.original_line.split("\t")
-
-        # Initialize the line to be printed
-        line = line_list[0]
-        for idx in range(1, len(line_list)):
-
-            if idx == 7 and len(self.matches) > 0:
-                info = ""
-                # Matches should have gene symbol, Position object, and zscore
-                for match in self.matches:
-                    (iden, pos, zscore) = match
-                    if info != "":
-                        info += ";"
-                    info += "GZEXP=" + str(round(zscore, 3))
-                if line_list[idx] != '.':
-                    info += ';' + line_list[idx]
-                line += '\t' + info
-            else:
-                line += '\t' + line_list[idx]
-
-        print(line, file=self.out_f)
-
-    def parse_line(self, line):
-        """
-        Read in a line of the vcf and create a Position object from the variant position.
-
-        Args:
-            line (str): VCF line to parse.
-
-        Returns:
-            None or a tuple with the following information (in order):
-            The position of the variant as a Position class object (see below)
-            A list of the motif names that matched that variant
-            A list of other motif fields for futher processing
-            A list of other INFO fields
-            The original line
-        """
-        line = line.strip()
-
-        line_list = line.split("\t")
-
-        # Find variant position
-        chrom = line_list[0]
-        start_pos = int(line_list[1])
-        ref_seq = line_list[3]
-        end_pos = start_pos + len(ref_seq)
-        var_pos = Position(chrom, start_pos, end_pos)
-
-        self.var_pos = var_pos
-        self.original_line = line
-
-        return
-
-    def close(self):
-        self.vcf_f.close()
-
-    def __str__(self):
-        return self.name
-
-
-class Position:
+# TODO - Move into a utils.py file and import as appropriate.
+class Position(object):
     """
+    Use to represent and handle genomic ranges more easily.
+
     Args:
-        chrom (string): Chromosome (chr1, chr2, etc).
-        start = start position
-        end = end position
+        chrom (str): Chromosome.
+        start (int): Start position.
+        end (int): End position.
     """
 
     def __init__(self, chrom, start_pos, end_pos):
         self.chrom = chrom
         self.start = start_pos
         self.end = end_pos
+        self.wing_start = None
+        self.wing_end = None
 
     def overlaps(self, pos_b):
         """
-        Determine whether this Position overlaps Position pos_b.
+        Return whether self overlaps Position pos_b's wings.
 
         Args:
-            pos_b (Position): A Position object.
+            pos_b (Position): Another Position.
 
         Returns:
-            (bool): Whether self overlaps with Position pos_b
+            bool: True if self overlaps with Position pos_b. False if not.
         """
-        if pos_b is None or self.chrom != pos_b.chr:
+        if pos_b is None:
             return False
 
-        start_max = max(self.start, pos_b.start)
-        end_min = min(self.end, pos_b.end)
+        if self.chrom != pos_b.chrom:
+            return False
 
-        return start_max <= end_min
+        start1, start2, end1, end2 = (self.start, pos_b.wing_start, self.end, pos_b.wing_end)
 
-    def add_wings(self, wing_length):
+        return end1 >= start2 and end2 >= start1
+
+    def set_wings(self, wing_length):
         """
-        Add wings to a Position start and end and return the two
-        resulting positions as a tuple.
+        Set wing positions for a Position object.
 
         Args:
             position (int): Position to add the wings to.
@@ -180,258 +84,441 @@ class Position:
         """
         wing_length = int(wing_length)
 
-        wing_start = self.start - wing_length
-        wing_stop = self.end + wing_length
+        self.wing_start = self.start - wing_length
+        self.wing_end = self.end + wing_length
 
-        wing_positions = (wing_start, wing_stop)
-
-        return wing_positions
+        return
 
     def __str__(self):
         return self.chrom + ":" + str(self.start) + "-" + str(self.end)
 
 
-def get_gene_exp(gene_f, thresh):
+# TODO - Move into a utils.py file and import as appropriate. Add doc_string.
+class Variant(object):
     """
-    Grabs gene names and expression values for each sample.
+    Use to process and handle variant records from a VCF more easily. Create from line of VCF file.
+    """
+
+    def __init__(self, line, all_sample_names):
+        self.line_list = line.strip().split("\t")
+        self.pos = Position(self.line_list[0], int(self.line_list[1]),
+                            (int(self.line_list[1]) + len(self.line_list[3])))
+        self.ref_allele = self.line_list[3]
+        self.var_allele = self.line_list[4]
+        self.iden = self.line_list[2]
+        self.orig_line = line.strip()
+        self.info_fields = self.line_list[7].split(";")
+        self.var_samples, self.motif_fields = self.parse_info_fields()
+        self.ref_samples = [x for x in all_sample_names if x not in self.var_samples]
+        self.loci = []
+
+        if self.var_samples is not None:  # Should never evaluate to False.
+            self.num_var_samps = len(self.var_samples)
+        else:
+            self.num_var_samps = 0
+
+    def parse_info_fields(self):
+        """
+        Get names of samples containing variant and motif INFO fields from a variant record's INFO fields.
+
+        Args:
+            self (Variant): Variant object.
+
+        Returns:
+            samples (list of str): List of samples in which variant was called.
+            motif_fields (list of str): List of INFO fields for variant that contain MOTIF related information.
+        """
+        samples = None
+        motif_fields = []
+
+        for field in self.info_fields:
+            if field != "INDEL":  # Take care of INDEL flag.
+                field_info = field.split("=")
+
+                # TODO - This is a hack work around a bug that's messing up the MOTIFN field in tf_expression.py.
+                # Go back and actually figure out why the MOTIFN field is getting split up sometimes.
+                try:
+                    name, data = (field_info[0], field_info[1])
+                except:
+                    name, data = "BROKEN", None
+            else:
+                name, data = "INDEL", None
+
+            # TODO - Write method that parses header to determine # samples with variant rather than this lazy method.
+            if name == "SAMPSTV":
+                samples = data.split(",")
+            elif name.startswith("MOTIF"):
+                motif_fields.append(field)
+
+        return (samples, motif_fields)
+
+    def get_variant_output(self, include_vcf=False):
+        """
+        Create VCF output line for given Variant object.
+
+        Args:
+            include_vcf (bool): True if variants that don't pass the z-score threshold for any Locus should excluded
+                from output. False if they should be included.
+
+        Returns:
+            output (str): Line for Variant in appropriate VCF format.
+                or
+            None: If include_vcf is True and no Locus that Variant overlaps hits the z-score threshold.
+        """
+        info = self.info_fields
+        info.insert(0, "EXPR=" + ",".join([x.ref_samples[self] for x in self.loci][0]))
+        info.insert(0, "EXPV=" + ",".join([x.var_samples[self] for x in self.loci][0]))
+
+        # TODO - Check and make sure next two lines are functioning properly.
+        info.insert(0, "EXPNR=" + str(self.loci[0].num_valid_ref[self]))
+        info.insert(0, "EXPNV=" + str(self.loci[0].num_valid_var[self]))
+
+        # Use lists to maintain order in output so that GENE, EXPVZ, EXPTHN fields can all be matched up.
+        z_scores = []
+        pass_thresh = []
+        loci_idens = []
+        for item in self.loci:
+            loci_idens.append(item.iden)
+            pass_thresh.append(item.num_pass_thresh[self])
+            tmp = "(" + ",".join([str(round(x, 4)) for x in item.z_scores[self][0]]) + ")"
+            z_scores.append(tmp)
+        info.insert(0, "EXPTHN=" + ",".join([str(x) for x in pass_thresh]))
+        info.insert(0, "EXPVZ=" + ",".join(z_scores))
+        info.insert(0, "GENE=" + ",".join(loci_idens))
+
+        # Check if any loci have samples that pass the Z-score threshold.
+        # TODO - Change this so it check that the NUMBER OF SAMPLES reaching the z-score threshold are enough.
+        if any([x >= 1 for x in pass_thresh]):
+            self.info_fields = info
+            self.line_list[7] = ";".join(self.info_fields)
+            output = "\t".join(self.line_list)
+            return output
+        else:
+            return None
+
+
+# TODO - Move into a utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
+class Locus(object):
+    """
+    Use to process and handle loci records from an activity file more easily.
 
     Args:
-        gene_f (str): Expression file in bed-like format.
-        thresh (float): Threshold used to filter genes that aren't expressed above this number in at least one sample.
+        pos (Position): Position object holding genomic position of locus.
+        orig_line (str): String from which the object was originally created.
+        iden (str): Unique identifier for the locus.
+        data (list of float): Data values for each sample for the record.
+    """
+
+    def __init__(self, line):
+        line_list = line.strip().split("\t")
+        self.pos = Position(line_list[0], int(line_list[1]), int(line_list[2]))
+        self.orig_line = line.strip()
+        self.iden = str(line_list[3])
+        self.data = [float(x) for x in line_list[4:]]
+        self.var_samples = {}
+        self.ref_samples = {}
+        self.ref_scores = {}
+        self.var_scores = {}
+        self.num_valid_ref = {}
+        self.num_valid_var = {}
+        self.num_pass_thresh = {}
+        self.variants = []
+        self.z_scores = {}
+
+    def add_variant(self, variant, var_samples, ref_samples):
+        """
+        Add Variant object variant to list of Variants that overlap the Locus.
+        """
+        self.variants.append(variant)
+        self.ref_scores[variant] = []
+        self.var_scores[variant] = []
+        self.var_samples[variant] = var_samples
+        self.ref_samples[variant] = ref_samples
+        self.num_valid_ref[variant] = len(ref_samples)
+        self.num_valid_var[variant] = len(var_samples)
+        self.num_pass_thresh[variant] = 0
+        self.z_scores[variant] = []
+
+    def calc_z_score(self, ref_ind, var_ind, variant, thresh=0):
+        # TODO - Add docstring here.
+        self.num_valid_ref[variant] = len(ref_ind)
+        self.num_valid_var[variant] = len(var_ind)
+
+        if len(ref_ind) > 1:  # If all samples (or all but 1) have the variant, can't calc z-score, return 'NA'.
+            for entry in ref_ind:
+                scores = self.ref_scores[variant]
+                scores.append(self.data[int(entry)])
+                self.ref_scores[variant] = scores
+            for entry in var_ind:
+                scores = self.var_scores[variant]
+                scores.append(self.data[int(entry)])
+                self.var_scores[variant] = scores
+
+            ref_mean = mean(self.ref_scores[variant])
+            ref_std = stdev(self.ref_scores[variant])
+
+            if ref_std == 0:  # If only one sample has ref, will have no variance. Should never happen.
+                for i in var_ind:
+                    vals = self.z_scores[variant]
+                    vals.append("NA")
+                    self.z_scores[variant] = vals
+            else:
+                score = [((x - ref_mean) / ref_std) for x in self.var_scores[variant]]
+
+                for item in score:
+                    if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
+                        passed = self.num_pass_thresh[variant]
+                        passed += 1
+                        self.num_pass_thresh[variant] = passed
+                    vals = self.z_scores[variant]
+                    vals.append(score)
+                    self.z_scores[variant] = vals
+        else:
+            for i in var_ind:
+                vals = self.z_scores[variant]
+                vals.append("NA")
+                self.z_scores[variant] = vals
+        return
+
+
+def get_expression_samples(header_line):
+    """
+    Parse header of expression file to return sample names and column indices.
+
+    Args:
+        header_line (str): Header line from expression file.
 
     Returns:
-        gene_dict (dict): Dictionary in following format
-            {gene_name:(Position,[exp_vals])}
+        act_samples (dict): Dictionary of {sample_name (str): sample_data_index (int)}.
+            sample_data_index is index for data in sample list, not the line as a whole.
+            e.g.: [samp1, samp2, samp3] & [20, 10, 5] for data values, then {'samp1': 0}.
     """
-    gene_dict = {}
+    line_list = header_line.strip().split("\t")
+    samples = line_list[4:]
+    exp_samples = {}
 
-    with open(gene_f) as f:
+    for item in samples:
+        samp_idx = samples.index(item)
+        sample = item.split(".")[0]
+        exp_samples[sample] = samp_idx
 
-        for line in f:
-            line = line.strip().split("\t")
-            chrom = line[0]
-            start = int(line[1])
-            stop = int(line[2])
-            pos = Position(chrom, start, stop)
-            gene_symb = line[3]
-            exp_vals = [float(x) for x in line[4:]]
-
-            # Check if any of the data values are above the threshold. Skip if not.
-            for data in exp_vals:
-                if data >= thresh:
-                    gene_dict[gene_symb] = (pos, exp_vals)
-                    break
-
-    return gene_dict
+    return exp_samples
 
 
-def main(inp_file, gene_file, wing_size, output, no_overlap=False, thresh=0):
+def get_vcf_samples(header_line):
     """
-    Find expression differences for genes located within <wing_size> of each variant.
-
-    Generate a z-score for expression of samples with the variant vs. without and report to output.
+    Parse header of VCF file to return sample names found in file.
 
     Args:
-        inp_file (str): Input file with locus positions and ID.
-        gene_file (str): Gene annotation file in gtf format.
-        wing_size (int): The length of the wings to add to each side the variant.
-        output (str): Name of the output file.
-        no_overlap (bool): Determines if loci that overlap the gene are included in output or not.
-            Default=False (included).
-        thresh (float): Genes that are below this threshold for all samples in the expression file will be excluded.
-            Good for excluding genes that aren't expressed.
+        header_line (str): Header line from VCF file.
+
+    Returns:
+        vcf_samples (list of str): List of samples with data in VCF file.
     """
+    line_list = header_line.strip().split("\t")
+    samples = line_list[9:]
+    vcf_samples = []
 
-    print("Parsing gene expression file.")
-    gene_dict = get_gene_exp(gene_file, thresh)
+    for item in samples:
+        sample = item.split(".")[-1]
+        if sample not in vcf_samples:
+            vcf_samples.append(sample)
 
-    output_file = open(output, "w")
+    return vcf_samples
 
-    with open(inp_file) as f:
 
-        print("Comparing loci positions to gene positions.",
-              " This will take a while for large datasets.")
+def compare_samples(exp_samples, vcf_samples):
+    """
+    Compare samples from expression file and vcf file.
 
-        # Used to count the number with no genes that overlap.
-        no_ovlp_count = 0
-        ovlp_count = 0
+    Return only samples in both as a list and delete those not found in both from the exp_samples dict.
 
-        genes_ovlp = 0
-        loci_excl_count = 0
+    Args:
+        exp_samples (dict): {(aexp_sample_names (str)): sample_indices (int)}
+        vcf_samples (list of str): List of samples found in VCF file.
+
+    Returns:
+        common_samps (list of str): List of names of samples found in both the expression file and VCF file.
+        valid_exp_samps (dict): Dict of {sample_names (str): expression file data column index (int)} for samples found
+            in both the expression file and VCF file.
+    """
+    common_samps = list(set(list(exp_samples)) & set(vcf_samples))
+    valid_exp_samples = {}
+
+    # Create new dict for expression samples containing only those found in VCF file as well.
+    for x in common_samps:
+        valid_exp_samples[x] = exp_samples[x]
+
+    return (common_samps, valid_exp_samples)
+
+
+def parse_expression_file(expression_file, thresh):
+    """
+    Parse expression file to get data values for each record along with sample
+    names and indices.
+
+    Args:
+        expression_file (str): Path to expression file to process.
+        thresh (float): Genes with no values above this threshold will be excluded from analysis.
+
+    Returns:
+        exp_samples (dict): Dict of {sample_name: index for expression vals}.
+        exp_data (list of Locus): List of Locus objects.
+    """
+    with open(expression_file) as f:
+        header = f.readline().strip()
+        exp_samples = get_expression_samples(header)  # Get sample names/indices.
+        exp_data = []
 
         for line in f:
+            vals = line.strip().split()[4:]
+            if any(float(x) > thresh for x in vals):
+                record = Locus(line)
+                exp_data.append(record)
 
-            # Create list to hold genes for that locus ID
-            gene_list = []
+        return (exp_samples, exp_data)
 
-            line = line.strip().split()
 
-            # Assign line elements to variables
-            locus_chrom = line[chrom_col]
-            locus_start = int(line[start_col])
-            locus_stop = int(line[end_col])
+def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, ethresh=0):
+    """
+    Compare expression of loci for samples harboring a variant within a given locus to those samples that do not.
 
-            # Check if the midpoint or edges of the locus are to be used
-            if midpoint:
-                # Get the midpoint of the locus
-                locus_midpoint = Get_Midpoint(locus_start, locus_stop)
+    For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and
+    some value for each loci for each sample, find loci that overlap a variant and compare the value of samples with
+    the variant to those without the variant. Report z-scores for each loci overlapped in an output VCF and report the
+    variants for each loci in a bed-like, loci-centric output file as well.
 
-                # Add wings to the midpoint
-                winged_positions = Add_Wings_Mid(locus_midpoint, wing_size)
-            else:
-                winged_positions = Add_Wings_Edge(locus_start, locus_stop, wing_size)
+    Args:
+        vcf_file (str): Path to sorted variant file to process.
+        exp_file (str): Path to expression 'bed' file.
+        out_vcf (str): Path to VCF output file to be created.
+        out_bed (str): Path to loci output file to be created.
+        thresh (float, optional): Z-score magnitude that must be met for variants/loci to be reported to output.
+        ethresh (float, optional): Expression threshold below which genes will be excluded from analysis.
+        size (int, optional): Set number of samples that must meet z-score threshold for locus to be reported to
+            bed output file. So this number of samples must have the variant and be significantly affected by it.
+        include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie near
+            a Locus and significantly affect its expression.
+    """
+    print("Parsing expression data file.")
+    exp_samps, exp_data = parse_expression_file(exp_file, ethresh)
 
-            wing_start, wing_stop = winged_positions
+    # Set wing boundaries.
+    for item in exp_data:
+        item.pos.set_wings(size)
 
-            # Iterate through each gene to see if it overlaps the winged locus positions
-            for gene in gene_dictionary:
-                gene_position = gene_dictionary[gene]
-                gene_chrom = gene_position[0]
+    output_vcf = open(out_vcf, "w")
 
-                # Check if it's even on the same chromosome as the locus, if not, skip to
-                # the next gene
-                if gene_chrom == locus_chrom:
-                    gene_start_stop = gene_position[1]
-                    gene_start = gene_start_stop[0]
-                    gene_stop = gene_start_stop[1]
+    with open(vcf_file) as f:
 
-                    # Check that the original start/stop of the locus isn't wider than with
-                    # the wings added, and if so, just use the original start/stop
-                    if int(locus_start) < int(wing_start) and int(locus_stop) > int(wing_stop):
-                        wing_start = locus_start
-                        wing_stop = locus_stop
+        # Add new INFO lines.
+        line = f.readline().strip()
+        now = time.strftime("%c")
+        info_needed = True
+        # TODO - Refactor this so output isn't such an enormous mess. One info field, multiple sub-fields per motif.
+        # TODO - Add sample names for those that pass threshold.
+        info = '##INFO=<ID=GENE,Number=.,Type=String,Description="IDs for genes that variant overlaps.">\n'
+        info += ('##INFO=<ID=EXPR,Number=.,Type=String,Description="Samples with the reference allele and '
+                 'expression data.">\n')
+        info += ('##INFO=<ID=EXPV,Number=.,Type=String,Description="Samples with the variant allele and expression '
+                 'data.">\n')
+        info += ('##INFO=<ID=EXPVZ,Number=.,Type=String,Description="Z-score for each gene near the variant.'
+                 ' Calculated for each sample containing the variant for each gene.">\n')
+        info += ('##INFO=<ID=EXPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets'
+                 'the z-score expression magnitude threshold.">\n')
+        info += ('##INFO=<ID=EXPNV,Number=1,Type=Integer,Description="Number of samples containing variant'
+                 ' and having expression data.">\n')
+        info += ('##INFO=<ID=EXPNR,Number=1,Type=Integer,Description="Number of samples containing reference'
+                 ' and having expression data.">')
+        command = ('##venusaur=<ID=expression,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+                   ' --expression ' + exp_file + ' --outputvcf ' + out_vcf +
+                   ' --threshold ' + str(thresh) + ' --include_vcf ' + str(include_vcf) + '">')
 
-                    # Check for overlap of the two ranges and add the gene to the gene_list if
-                    # this returns True.
-                    if Overlap(wing_start, wing_stop, gene_start, gene_stop):
-                        gene_list.append(gene)
+        # Print new info lines at the top of the ##INFO section.
+        while line.startswith("##"):
+            if info_needed and line.startswith("##INFO"):
+                print(command, file=output_vcf)
+                print(info, file=output_vcf)
+                info_needed = False
+            print(line, file=output_vcf)
+            line = f.readline().strip()
 
-            # Make sure all TSSs associated with the gene don't overlap the locus if
-            # excl_promoter==True.
-            if excl_proms:
+        vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
+        print(line, file=output_vcf)
 
-                ovlp = False
+        print("Comparing samples in VCF file and expression file to find commonalities.\n")
+        print("VCF samples: ", *vcf_samples, end="\n\n")
+        print("Expression samples: ", *list(exp_samps.keys()), end="\n\n")
 
-                # Iterate through the prom_dictionary to check each TSS associated with the gene
-                for item in gene_list:
-                    for prom in prom_dictionary:
-                        if item in prom:
-                            prom_position = prom_dictionary[prom]
-                            prom_start_stop = prom_position[1]
-                            prom_start = prom_start_stop[0]
-                            prom_stop = prom_start_stop[1]
+        common_samps, valid_exp_samps = compare_samples(exp_samps, vcf_samples)  # Get common samples b/twn the two.
+        print("Common samples: ", *common_samps, end="\n\n")
+        print("Processing variants. This may take some time.")
+        # TODO - Progress bar might actually be a decent addition.
 
-                            # Check for overlap between the promoter and the locus, and if it
-                            # occurs, just move to the next line
-                            ovlp = Overlap(locus_start, locus_stop, prom_start, prom_stop)
+        for line in f:
+            current_var = Variant(line, vcf_samples)
+            loci_ovlp_var = []
 
-                            if ovlp:
+            # Check if any of the variant samples actually have expression data as well, skip if not.
+            for x in current_var.var_samples:
+                if x in common_samps:
+                    for item in exp_data:
+                        if current_var.pos.chrom != item.pos.chrom:
+                            continue
+                        elif current_var.pos.overlaps(item.pos):
+                            loci_ovlp_var.append(item)
+                    break
 
-                                break
-
-                    if ovlp:
-                        break
-
-                if not ovlp:
-                    if len(gene_list) > 0:
-                        ovlp_count += 1
-                        genes_ovlp += len(gene_list)
-                        line.append(";".join(gene_list))
-                        print(*line[0:], sep="\t", file=output_file)
-                    else:
-                        no_ovlp_count += 1
-                        line.append("NA")
-                        print(*line[0:], sep="\t", file=output_file)
+            # If variant overlaps no loci, print to output only if include_vcf option used.
+            if not loci_ovlp_var:
+                if include_vcf:
+                    print(line.strip(), file=output_vcf)
+                    continue
                 else:
-                    loci_excl_count += 1
+                    continue
 
-            elif no_ovlp:
+            # Get expression data indices for both samples with variant and without.
+            var_exp_indices = [valid_exp_samps[x] for x in current_var.var_samples if x in valid_exp_samps]
+            ref_exp_indices = [valid_exp_samps[x] for x in valid_exp_samps if x not in current_var.var_samples]
 
-                overlap = False
+            # Calculate z-scores.
+            for x, loc in enumerate(loci_ovlp_var):
+                var_samples = [x for x in current_var.var_samples if x in valid_exp_samps]
+                ref_samples = [x for x in valid_exp_samps if x not in current_var.var_samples]
+                loc.add_variant(current_var, var_samples, ref_samples)  # Add Variant to Locus object.
+                loc.calc_z_score(ref_exp_indices, var_exp_indices, current_var, thresh)
+                current_var.loci.append(loc)  # Add Locus object to given Variant.
+                loci_ovlp_var[x] = loc
 
-                # Iterate through the gene_list to check for overlap
-                for item in gene_list:
+            vcf_out_line = current_var.get_variant_output(include_vcf)
 
-                    gene_position = gene_dictionary[item]
-                    gene_chrom = gene_position[0]
+            if vcf_out_line is not None:
+                print(vcf_out_line, file=output_vcf)
+            elif include_vcf:
+                print(line.strip(), file=output_vcf)
 
-                    # Check if it's even on the same chromosome as the locus, if not, skip to
-                    # the next gene
-                    if gene_chrom == locus_chrom:
-                        gene_start_stop = gene_position[1]
-                        gene_start = gene_start_stop[0]
-                        gene_stop = gene_start_stop[1]
-
-                        # Check for overlap between the promoter and the locus, and if it occurs,
-                        # just move to the next line
-                        overlap = overlap(locus_start, locus_stop, gene_start, gene_stop)
-
-                    if overlap:
-                        break
-
-                if not overlap:
-                    if len(gene_list) > 0:
-                        ovlp_count += 1
-                        genes_ovlp += len(gene_list)
-                        line.append(";".join(gene_list))
-                        print(*line[0:], sep="\t", file=output_file)
-                    else:
-                        no_ovlp_count += 1
-                        line.append("NA")
-                        print(*line[0:], sep="\t", file=output_file)
-                else:
-                    loci_excl_count += 1
-
-            else:
-
-                # Print to the output file
-                # Check if there are genes in the gene_list, if not it will print NA
-                if len(gene_list) > 0:
-                    ovlp_count += 1
-                    genes_ovlp += len(gene_list)
-                    line.append(";".join(gene_list))
-                    print(*line[0:], sep="\t", file=output_file)
-                else:
-                    no_ovlp_count += 1
-                    line.append("NA")
-                    print(*line[0:], sep="\t", file=output_file)
-
-    if excl_proms:
-        print("Number of loci excluded for overlap with a TSS: " + str(loci_excl_count))
-    if no_overlap:
-        print("Number of loci excluded for overlap with a gene: " + str(loci_excl_count))
-
-    print("Number of loci with no overlapping genes: " + str(no_ovlp_count))
-    print("Number of loci with overlapping genes: " + str(ovlp_count))
-
-    output_file.close()
+    print("Complete.")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)
 
     parser.add_argument("-i", "--input", dest="input_file", required=True)
-    parser.add_argument("-g", "--gene", dest="gene_file", required=True)
-    parser.add_argument("-size", "--wingsize", dest="wing_size", type=int, default=50000)
-    parser.add_argument("-o", "--output", dest="output_file", required=True)
-    parser.add_argument("-noovlp", "--nooverlap", action="store_true")
-    parser.add_argument("-th", "--threshold", dest="thresh", type=float, required=False, default=0)
+    parser.add_argument("-e", "--expression", dest="expression_file", required=True)
+    parser.add_argument("-ov", "--outputvcf", dest="output_vcf", required=True)
+    parser.add_argument("-s", "--size", dest="wing_size", required=False, default=50000, type=int)
+    parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=0, type=float)
+    parser.add_argument("-eth", "--ethreshold", dest="ethreshold", required=False, default=0, type=float)
+    parser.add_argument("-iv", "--include_vcf", action="store_true", required=False)
 
     args = parser.parse_args()
 
-    print("Input file {}\n Gene file {}\n Wing size {}\n Output {}\n\n".format(
-        args.input_file,
-        args.gene_file,
-        args.wing_size,
-        args.output_file
-    ))
-
-    # Easier to use argument variables
     inp_file = args.input_file
-    g_file = args.gene_file
-    wing_size = args.wing_size
-    out_file = args.output_file
-    no_ovlp = args.nooverlap
-    thresh = args.thresh
+    exp_file = args.expression_file
+    vcf_out = args.output_vcf
+    size = args.wing_size
+    th = args.threshold
+    eth = args.ethreshold
+    include_vcf = args.include_vcf
 
-    main(inp_file, g_file, wing_size, out_file, no_ovlp, thresh)
+    main(inp_file, exp_file, vcf_out, th, size, include_vcf, eth)
