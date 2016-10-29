@@ -155,8 +155,8 @@ class SequenceElement:
         """
         self.name = chromosome
         self.position = position
-        self.seq_var.seq = reference_seq
-        self.seq_ref.seq = variant_seq
+        self.seq_var.seq = variant_seq
+        self.seq_ref.seq = reference_seq
 
     def assign_rev_complement(self):
         """
@@ -183,9 +183,9 @@ class SequenceElement:
         # using regular expression to match on numbers to append sample set
         # QQQ: maybe use length not .\. or convert to number or ? maybe faster
         # YYY: Maybe, so long as the output isn't changed. Could also do:
-        #    `any(char.isdigit() for char in file_samples_array[index])` if you 
+        #    `any(char.isdigit() for char in file_samples_array[index])` if you
         #     don't want to precompile a regex for every call. No idea on speed.
-        # CCC-WK: input file read time with this code was well under a minute, 
+        # CCC-WK: input file read time with this code was well under a minute,
         #     non-issue, leave for future possible speed increases. XXX double check it was used
         search_pattern = re.compile('[0-9]')    # faster to precompile
         for index in range(len(file_samples_array)):
@@ -224,8 +224,8 @@ class SequenceElement:
         # check that reference sequence matches vcf's sequence for position
         returned_ref_b = surr_seq[wing_length:-wing_length]
         print(("sequence: " + surr_seq + "\n\t" + returned_ref_b + "\n" +
-            "\tleft: " + sub_from_left(surr_seq, wing_length) + "\n" +
-            "\tright: " + sub_from_right(surr_seq, wing_length) ))
+            "\tleft:  " + sub_from_start(surr_seq, wing_length) + "\n" +
+            "\tright: " + sub_from_end(surr_seq, wing_length) ))
         if self.seq_ref.seq.upper() != returned_ref_b.upper():
             print(("**ERROR**\nVCF reference sequence for " +
                 self.name + " pos " + str(self.position) + ":\n\t\"" +
@@ -238,8 +238,8 @@ class SequenceElement:
                     self.name + " pos " + str(self.position)))
 
         # assign wing sequence strings
-        self.seq_left_wing = sub_from_left(surr_seq, wing_length)
-        self.seq_right_wing = sub_from_right(surr_seq, wing_length)
+        self.seq_left_wing.seq = sub_from_start(surr_seq, wing_length)
+        self.seq_right_wing.seq = sub_from_end(surr_seq, wing_length)
         return
 
     def print_str(self):
@@ -255,8 +255,8 @@ class SequenceElement:
 
     def return_full_seq(self, sequence_str, wing_length):
         """
-        return sequence to process with wings attached. Uses sub_from_left and
-        sub_from_right methods to reduce wing sizes to requested length.
+        return sequence to process with wings attached. Uses sub_from_end and
+        sub_from_start methods to reduce wing sizes to requested length.
 
         Arguments:
             sequence should be the core sequence
@@ -264,15 +264,15 @@ class SequenceElement:
         Returns:
             string of left wing + sequence string + right wings
         """
-        build_seq = sub_from_left(self.seq_left_wing.seq, wing_length)
+        build_seq = sub_from_end(self.seq_left_wing.seq, wing_length)
         build_seq += sequence_str
-        build_seq += sub_from_right(self.seq_right_wing.seq, wing_length)
+        build_seq += sub_from_start(self.seq_right_wing.seq, wing_length)
         return build_seq
 
     def return_full_seq_reverse_complement(self, sequence_str, wing_length):
         """
-        return sequence to process with wings attached. Uses sub_from_left and
-        sub_from_right methods to reduce wing sizes to requested length.
+        return sequence to process with wings attached. Uses sub_from_end and
+        sub_from_start methods to reduce wing sizes to requested length.
 
         Arguments:
             sequence should be the reverse complement of the core sequence
@@ -281,9 +281,9 @@ class SequenceElement:
             For all strings the reverse complement returns
             string of right wing + sequence string + left wings
         """
-        build_seq = sub_from_right(self.seq_right_wing.seq_rev_complement, wing_length)
+        build_seq = sub_from_start(self.seq_right_wing.seq_rev_complement, wing_length)
         build_seq += sequence_str
-        build_seq += sub_from_left(self.seq_left_wing.seq_rev_complement, wing_length)
+        build_seq += sub_from_end(self.seq_left_wing.seq_rev_complement, wing_length)
         return build_seq
 
     def return_full_ref_seq(self, wing_length):
@@ -462,6 +462,11 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     # is either  0 indexed and max (last) base is not returned
     #   or      1 indexed and min (first) base isn't returned
     # fas returns a 'sequence' object, converted by a string for return
+    print(("pulling reference sequence for (" + chromo + ", " +
+        format(var_pos) + ", " + format(ref_l) + ", " + format(wing_l) + ", " +
+        format(fas) + ")\n\t" +
+        format(var_pos - wing_l - 1) + ":" + format(var_pos + wing_l + ref_l - 1)
+        ))
     ref_seq = fas[chromo][var_pos - wing_l - 1: var_pos + wing_l + ref_l - 1]
 
     # debug print("\tSequence: "+str(ref_seq))
@@ -489,7 +494,7 @@ def read_line2sample_dictionaries(headerString):
     CCC-JA: This could be an issue if multiple columns are for the same sample.
         This might occur if a user is using multiple methods to call their variants
         and pooling the end results together (which is pretty common and something
-        we do as well.) Or they may be calling variants from multiple files for the 
+        we do as well.) Or they may be calling variants from multiple files for the
         same sample (think replicates or sequencing from different experiments).
         Really, it doesn't matter, so long as we know which samples have the variant
         and which don't. We'll have to create a specific format for the sample names
@@ -524,13 +529,16 @@ def read_line2sample_dictionaries(headerString):
     return (samplesByName, samplesByIndex)
 
 
-def sub_from_left(sequence_string, return_length):
+def sub_from_end(sequence_string, return_length):
     """
     return a sequence string of return_length from sequence_string
     drops values at start ie chops off left side
     if return_length > length sequence_string --> does NOT pad
 
     note: function was originally part of SequenceElement as sub_left_wing
+
+    Example:
+        sub_from_end('1234567', 3) returns 567
     """
     if (return_length <= 0):
         return ""
@@ -542,13 +550,16 @@ def sub_from_left(sequence_string, return_length):
     return sequence_string[(seq_length - return_length):]
 
 
-def sub_from_right(sequence_string, return_length):
+def sub_from_start(sequence_string, return_length):
     """
     return a sequence string of return_length from sequence_string
     drops values at end ie chops off right side
     if return_length > length sequence_string --> does NOT pad
 
     note: function was originally part of SequenceElement as sub_right_wing
+
+    Example:
+        sub_from_start('1234567', 3) returns 123
     """
     if (return_length <= 0):
         return ""

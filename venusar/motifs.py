@@ -636,12 +636,21 @@ motif_set = motif.get_motifs(file_motif, pc, th, bp)
     # motif_set.motifs[index].positions    more 'valid'
 # debug print("Maximum motif length is "+str(motif_set.max_positions)+".")
 
-# XXX: this is wrong; need to grab sequence as full variant but only pull in
-#    length around wing that is necessary!
+# need to grab sequence as full variant but only pull in
+# length around wing that is necessary!
+#     XXX:QQQ: what does it mean to use wing_l
+#        as the max of longest motif and argument ws?
+#        if either > individual motif length --> only uses motif length
+#        therefore wing_l can not be greater than motif length
+#        if wing_l less than max motif length then larger motifs are
+#        ignored during processing? what happens? QQQ
 # Wing length for individual variants is calculated dynamically so that it is
 # always one less than the length of the maximum motif so motif is only matched
 # against places with overlap with the variant
-wing_l = max(motif_set.max_positions - 1, ws)
+# QQQ: should wing_length be the number of elements to grab or the maximum index?
+#        ie motif_set.max_positions or motif_set.max_positions - 1
+wing_l = min( motif_set.max_positions, ws ) #max(motif_set.max_positions - 1, ws)
+print("Proceeding with wing_size: " + format(wing_l) + " vs defined ws(" + format(ws) + ")" )
 
 # Open output file.
 fileHan_output = open(file_output, "w")
@@ -774,9 +783,9 @@ if multivar_computation_flag:
     #     or rather just insert multivariant items into middle of list
     #     before next chromosome elements
     # YYY: Typically, we'd expect lexicographic order for input, it's the standard
-    #     order for sorting this data typically. I don't think we need to build in 
-    #     a sort, just tell users to sort their VCFs/bed files beforehand. 
-    # CCC-WK: not user input. the sort has to do with creating multivariants from the 
+    #     order for sorting this data typically. I don't think we need to build in
+    #     a sort, just tell users to sort their VCFs/bed files beforehand.
+    # CCC-WK: not user input. the sort has to do with creating multivariants from the
     #     set of individual inputs. The program is doing work for the user, by
     #     combining variants into super-variants, see email discussion.
     #     so there needs to be a decision on where in the order to put
@@ -811,6 +820,9 @@ for index in range(variant_set.length()):
     #    get_surrounding_seq(chr, pos, len(ref_bases), wing_l, fa_ind)
     #    self.get_surround_seq(self, wing_length, fasta_object, force_ref_match)
     #
+    print("\t\tpulling " + format(wing_l) +
+        " base wings from index " + format(fa_ind) +
+        " arg: " + format(args.force_ref_match))
     var_element.get_surround_seq(wing_l, fa_ind, args.force_ref_match)
     # 2. compute reverse complement
     var_element.assign_rev_complement()
@@ -826,8 +838,8 @@ for index in range(variant_set.length()):
     #     plusmatch returns an list of MotifMatch objects
     # Add local environment data: XXX: new version guessed intent see code
     #    the process_local_env function never returned anything before
-    #    the individual iteration output was occumulated in a transient variable
-    #    and the output (presuming ple had any) was not previously assigned
+    #    the individual iteration output was accumulated in a transient variable
+    #    and the output (presuming PLE had any) was not previously assigned
     #
     plusmatch = motif_set.process_local_env(bp, plusmatch, var_element, None, var_seq, ref_seq)
 

@@ -103,8 +103,8 @@ class MotifArray:
 
         # scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores(baseline_p, var_seq, wing_l)
-        r_scored = self.motif_scores(baseline_p, ref_seq, wing_l)
+        scored = self.motif_scores(baseline_p, var_seq, wing_l, True)
+        r_scored = self.motif_scores(baseline_p, ref_seq, wing_l, True)
 
         matches = []    # list of MotifMatch objects
 
@@ -113,11 +113,6 @@ class MotifArray:
             (iden, name, th, max_score, match_seq, motif_index) = scored[idx]
             (rid, rname, rth, rmax_score, rmatch_seq, motif_index) = r_scored[idx]
             if (max_score >= th or rmax_score >= rth):
-                # ZZZ:QQQ: there needs to be a margin of error for th != rth; using 1%. appropriate?
-                # CCC1: Not sure I understand, why is this necessary? If th is just the threshold
-                #     for the motif, shouldn't they be the same? Or am I missing something?
-                # CCC2WK: when I wrote the comment I was thinking of them as computed values.
-                #         XXX. remove threshold margin of error comments in next push
                 if (iden != rid or name != rname or th == rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
                           iden + " != " + rid +
@@ -212,7 +207,7 @@ class MotifArray:
         """
         Finds GC content, weak homotypic matches, and motif matches for
             co-binding transcription factors (not currently implemented).
-        Homotypic match found by scoring left wing + 1 base of the sequence?XXX
+        Homotypic match found by scoring wings only no overlap with variant
 
         Args:
             baseline_p = array of baseline probabilities of each base,
@@ -267,15 +262,15 @@ class MotifArray:
             vh_matches = []
             rh_matches = []
 
-            # XXX!: original code and comments confusing:
+            # YYY!: original code and comments confusing:
             #    if homotopic matches are not supposed to overlap then...
             #    why does code in motifs.py do wing size 1 less than max positions?
-            #    why did the original code below compute variante and reference
+            #    why did the original code below compute variant and reference
             #        matches against wings when if they don't overlap then same?
             #
-            # XXX:QQQ: which of the following should be used!?!
+            # ZZZ: which of the following should be used!?! (answer no overlap version)
             #
-            # Check each wing seperately,
+            # Check each wing separately,
             # homotypic matches should not overlap the variant
             # because variant and reference wings match only compute once
             # wing size = size of the motif matched?
@@ -295,7 +290,7 @@ class MotifArray:
             #     If it was say, 55-60% in the local area of the variant, it might lend a bit of 
             #     credence towards it being a genuine binding site. Just another piece of info.
             #     In summary, the original code was iffy, at best. 
-            # CCC-WK: code as written makes no attempt to check for wings overlapping
+            # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
             if True:    # no overlap version
                 left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
                     match_motif.positions)
@@ -305,7 +300,7 @@ class MotifArray:
                 vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
                 # same strings so variant and ref homotypic matches are equal
                 rh_matches = vh_matches
-            else:    # overlap one character version
+            else:    # overlap one character version: XXX: remove after function works
                 left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
                     match_motif.positions - 1)
                 right_wing = sequence.sub_from_right(seq_element.seq_right_wing.seq,
@@ -479,11 +474,14 @@ class MotifElement:
 
     def score_base(self, probability, baseline_p):
         """
-        compute the ... log likelihood ratio
-        XXX: not in score motif says natural log but this is log2
-        YYY: Yeah, we want everything in log2. I think Ethan had converted everything to log2
-            and likely forgot to update the comment. Worth double checking though.
-        YYY: note this could be outside the class
+        compute the ... log likelihood ratio using log2
+        
+        Args:
+            2 number inputs: probability, baseline_p
+        Returns:
+            log likelihood ration ( probability/baseline_p)
+        
+        YYY: note this could be outside the class  QQQ: why?
         """
         if (probability == 0):
             # should mathematically be negative infinity
@@ -521,9 +519,8 @@ class MotifElement:
             return score
 
         for pos in range(len(self.positions)):
-            # Match base
+            # Match base: compute score for each overlap position
             if (sequence_str[pos] == 'A' or sequence_str[pos] == 'a'):
-                # natural log of likelihood ratio    ### XXX but computes log2!
                 score += self.score_base(self.matrix[0][pos], baseline_p[0])
             elif (sequence_str[pos] == 'C' or sequence_str[pos] == 'c'):
                 score += self.score_base(self.matrix[1][pos], baseline_p[1])
@@ -573,7 +570,9 @@ class MotifMatch:
 
 def get_motifs(motif_filename, pc, default_th, base_pr):
     """
-    Read in and calculate probability matrices from a frequency matrix file.
+    Read file containing the set of motif TF. Read from frequency matrix file.
+    Computes and returns probability matrices for each motif TF except
+    those individual motifs deemed to be invalid.
 
     Args:
         motif_f = filename of the frequency matrix
@@ -590,16 +589,18 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
     Returns:
         MotifArray object = set of Motif sequences as MotifElement objects
         Each object in the array defines Motif characteristics
+        
 
         If reading multiple files use MotifArray join method on returned object
 
+    YYY: The motif length for each TF is stored in MotifElement.positions
+         The wing length of the compared sequence is by length of 
+         individual MotifElement not the max for all in the MotifArray
 
-    XXX: QQQ: believe this should index motif length by TF.
-        also modify wing length on individual not max for all
-    YYY: I think you're correct here.
     """
 
     motif_set = MotifArray()
+    bad_motif_count = 0     # error if count exceeds 3
 
     # Open and import motif file: note: with always closes open file
     with open(motif_filename) as file_handle:
@@ -616,6 +617,11 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
         # Iterate through file line by line.
         for line in file_handle:
 
+            if line.startswith("#"):
+               # QQQ: should the file read in a header # marked
+               #      that specifies count or probability type?
+               continue;
+        
             # First line contains id and name
             if i == 0:
                 # must first remove brackets and split on whitespace
@@ -646,13 +652,23 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
                 base_element.pseudocount = pc
 
                 if base_element.valid_flag:
-                    # calculate base occurence frequency by position
+                    # calculate base occurrence frequency by position
                     base_element.calculate_probabilities()
-
-                # QQQ if invalid should it not include?
-                # YYY: Probably not. In fact, I'd be worried about the rest of the set if one was invalid. 
-                #     I'd be tempted to throw and error and nuke the process and just tell the user to ensure
-                #     their motif file is appropriately formatted.
+                else:
+                    # invalid MotifElement matrix --> flag + do not include
+                    # YYY: if invalid --> do not include;
+                    #      file is suspect; if too many errors encountered
+                    #      then throw error. may be safer to throw error if
+                    #      any errors are encountered (ie bad file format)
+                    bad_motif_count = bad_motif_count + 1
+                    print('Reading ' + format(motif_filename) + 
+                            ':\n\tdropping motif element ' +
+                            format(base_element.name) + '.' )
+                    if bad_motif_count > 2:
+                        # XXX: throw an ERROR
+                        print('Too many errors encountered. User input invalid')
+                        raise ValueError('User defined motif file format invalid.')
+                    
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
 
@@ -714,3 +730,111 @@ def get_baseline_probs(baseline_f):
               "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
               "\tContinuing with default probabilities: " + format(bp_array)))
         return bp_array
+        
+def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
+    """
+    Write file containing the set of motif TF. Read from frequency matrix file.
+    Computes and returns probability matrices for each motif TF except
+    those individual motifs deemed to be invalid.
+    
+    XXX: function is incomplete
+
+    Args:
+        motif_f = filename of the frequency matrix
+        pc = pseudocount value (small, greater than zero) to be added to all
+            positions in matrix
+        default_th = default threshold value used if none is listed in the
+            motif file (should be third part of header if present).
+            If None is given, default threshold will be calculated for motifs.
+        base_pr = probabilities as a float array of the form:
+            [ PrA, PrC, PrG, PrT ]
+            ** Currently unused by this method
+                but could be used to return a pssm instead of a pwm
+
+    Returns:
+        MotifArray object = set of Motif sequences as MotifElement objects
+        Each object in the array defines Motif characteristics
+        
+
+        If reading multiple files use MotifArray join method on returned object
+
+    YYY: The motif length for each TF is stored in MotifElement.positions
+         The wing length of the compared sequence is by length of 
+         individual MotifElement not the max for all in the MotifArray
+
+    """
+    return -1
+    motif_set = MotifArray()
+    bad_motif_count = 0     # error if count exceeds 3
+
+    # Open and import motif file: note: with always closes open file
+    with open(motif_filename) as file_handle:
+
+        # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
+        # arrays for C, G, T - each with same format as A
+        # 1 blank line separates each individual TF position weight matrix
+        # reading files assumes {header,A,C,G,T,blankline} order
+        base_element = MotifElement()
+
+        # index for line you are looking at in the motif matrix set (not file)
+        i = 0
+
+        # Iterate through file line by line.
+        for line in file_handle:
+
+            # First line contains id and name
+            if i == 0:
+                # must first remove brackets and split on whitespace
+                line = line.strip().strip('[').strip(']').split()
+
+                base_element.id = line[0]
+                base_element.name = line[1]
+                    #print(format(i) + ":" + base_element.id + " " + base_element.name)    # DEBUG LINE
+                # If threshold given, use it for this matrix. Else, use default.
+                if (len(line) > 2):
+                    base_element.threshold = float(line[2])
+                else:
+                    base_element.threshold = default_th
+
+            # Order of position weight matrices is A,C,G,T. Remove brackets etc.
+            elif i < 5:
+                # must first remove brackets and split on whitespace
+                #     technically should modify index by found ACGT
+                    #print(i)    # DEBUG LINE
+                line = line.strip().strip('A').strip('C').strip('G').strip('T').strip().strip('[').strip(']').split()
+                base_element.matrix[i - 1] = line[0:]
+
+            # add motif to list and continue (there are 2 newlines between motifs)
+            else:
+                # check validity and set values passed
+                base_element.check_valid()
+                base_element.base_probability = base_pr
+                base_element.pseudocount = pc
+
+                if base_element.valid_flag:
+                    # calculate base occurrence frequency by position
+                    base_element.calculate_probabilities()
+                else:
+                    # invalid MotifElement matrix --> flag + do not include
+                    # YYY: if invalid --> do not include;
+                    #      file is suspect; if too many errors encountered
+                    #      then throw error. may be safer to throw error if
+                    #      any errors are encountered (ie bad file format)
+                    bad_motif_count = bad_motif_count + 1
+                    print('Reading ' + format(motif_filename) + 
+                            ':\n\tdropping motif element ' +
+                            format(base_element.name) + '.' )
+                    if bad_motif_count > 2:
+                        # XXX: throw an ERROR
+                        print('Too many errors encountered. User input invalid')
+                        raise ValueError('User defined motif file format invalid.')
+                    
+                # append the current TF matrix to the motif set
+                motif_set.add_motif(base_element)
+
+                # reset the tracker variables
+                i = -1
+                base_element.clear()
+            i += 1
+
+    return motif_set
