@@ -528,6 +528,7 @@ file_output = args.output_file
 file_baseline_prob = args.baseline_file    # defaults to None
 file_chip = args.chip_file
 file_output_chip = args.chip_out_file
+filter_bed = False
 pc = float(args.pseudocounts)
 ws = int(args.wing_size)
 if (args.multi_var is None):
