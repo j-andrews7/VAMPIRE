@@ -135,11 +135,11 @@ class MotifArray:
             (iden, name, th, max_score, match_seq, motif_index) = scored[idx]
             (rid, rname, rth, rmax_score, rmatch_seq, motif_index) = r_scored[idx]
             if (max_score >= th or rmax_score >= rth):
-                if (iden != rid or name != rname or th == rth):
+                if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
                           iden + " != " + rid +
                           " or " + name + " != " + rname +
-                          " or " + th + " != " + rth))
+                          " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -225,7 +225,7 @@ class MotifArray:
 
         return scores
 
-    def process_local_env(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq):
+    def process_local_env(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l):
         """
         Finds GC content, weak homotypic matches, and motif matches for
             co-binding transcription factors (not currently implemented).
@@ -241,6 +241,7 @@ class MotifArray:
                 a given transcription factor name [feature not enabled. Use None]
             v_seq = variant sequence array of characters (strings 'A','C','G', or 'T')
             r_seq = reference sequence array of characters (strings 'A','C','G', or 'T')
+            wing_l = integer wing length to override individual motif length
 
         Returns: Updates matches the list of MotifMatch objects
 
@@ -273,7 +274,7 @@ class MotifArray:
             if match_index < 0 or match_index > self.length():
                 print(("**Error** process_local_env unable to find motif " +
                     matches[matches_index].name + " in MotifArray."))
-                continue;
+                continue
 
             # motif info
             #self.motifs[match_index].matrix
@@ -291,11 +292,10 @@ class MotifArray:
             #        matches against wings when if they don't overlap then same?
             #
             # ZZZ: which of the following should be used!?! (answer no overlap version)
-            #
-            # Check each wing separately,
-            # homotypic matches should not overlap the variant
-            # because variant and reference wings match only compute once
-            # wing size = size of the motif matched?
+            #   Check each wing separately,
+            #   homotypic matches should not overlap the variant
+            #   because variant and reference wings match only compute once
+            #   wing size = size of the motif matched?
             # CCC-JA: Yeah, this part of the code was/is a mess. He was rushing towards the end
             #     to try to take into account homotypic matches and local GC content. I
             #     couldn't really decipher what was going on and he had a lot of unused variables
@@ -313,32 +313,16 @@ class MotifArray:
             #     credence towards it being a genuine binding site. Just another piece of info.
             #     In summary, the original code was iffy, at best.
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
-            if True:    # no overlap version
-                left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
-                    match_motif.positions)
-                right_wing = sequence.sub_from_right(seq_element.seq_right_wing.seq,
-                    match_motif.positions)
-                vh_matches = match_motif.ht_matches_in(baseline_p, left_wing)
-                vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
-                # same strings so variant and ref homotypic matches are equal
-                rh_matches = vh_matches
-            else:    # overlap one character version: XXX: remove after function works
-                left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
-                    match_motif.positions - 1)
-                right_wing = sequence.sub_from_right(seq_element.seq_right_wing.seq,
-                    match_motif.positions - 1)
-                vh_matches = match_motif.ht_matches_in(baseline_p,
-                    left_wing + seq_element.seq.seq[0])
-                vh_matches += match_motif.ht_matches_in(baseline_p,
-                    right_wing + seq_element.seq.seq[0])
-                if ( seq_element.seq.seq[0].upper() == seq_element.seq_ref.seq[0].upper() ):
-                    # same start base --> variant and ref homotypic matches are equal
-                    rh_matches = vh_matches
-                else:
-                    rh_matches = match_motif.ht_matches_in(baseline_p,
-                        left_wing + seq_element.seq_ref.seq[0])
-                    rh_matches += match_motif.ht_matches_in(baseline_p,
-                        right_wing + seq_element.seq_ref.seq[0])
+
+            # -- no overlap version
+            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
+                #match_motif.positions)
+            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
+                #match_motif.positions)
+            vh_matches = match_motif.ht_matches_in(baseline_p, left_wing)
+            vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
+            # same strings so variant and ref homotypic matches are equal
+            rh_matches = vh_matches
 
             # Update the match information
             matches[matches_index].var_ht = vh_matches
@@ -484,7 +468,7 @@ class MotifElement:
         see also: MotifArray.motif_scores()
         """
         homotypic_matches = []
-        for pos in range(len(sequence_str) - len(self.positions) + 1):
+        for pos in range(len(sequence_str) - self.positions + 1):
             pos_score = self.score_motif(baseline_p, sequence_str[pos:])
             # Return the homotypic match if it is above the threshold
             if pos_score > self.threshold:
@@ -543,14 +527,14 @@ class MotifElement:
 
         score = 0
 
-        if len(sequence_str) < len(self.positions):
+        if len(sequence_str) < self.positions:
             print("Sequence shorter than probability matrix. Returning score of 0.")
             return score
 
         if not self.valid_flag or self.matrix_type != 1:
             return score
 
-        for pos in range(len(self.positions)):
+        for pos in range(self.positions):
             # Match base: compute score for each overlap position
             if (sequence_str[pos] == 'A' or sequence_str[pos] == 'a'):
                 score += self.score_base(self.matrix[0][pos], baseline_p[0])

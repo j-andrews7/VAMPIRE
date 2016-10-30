@@ -638,19 +638,20 @@ motif_set = motif.get_motifs(file_motif, pc, th, bp)
 # debug print("Maximum motif length is "+str(motif_set.max_positions)+".")
 
 # need to grab sequence as full variant but only pull in
-# length around wing that is necessary!
-#     XXX:QQQ: what does it mean to use wing_l
+# length around wing that is necessary
+# XXX:QQQ: what does it mean to use wing_l
 #        as the max of longest motif and argument ws?
-#        if either > individual motif length --> only uses motif length
-#        therefore wing_l can not be greater than motif length
-#        if wing_l less than max motif length then larger motifs are
-#        ignored during processing? what happens? QQQ
-# Wing length for individual variants is calculated dynamically so that it is
-# always one less than the length of the maximum motif so motif is only matched
-# against places with overlap with the variant
+#    1. motif matching for individual variants
+#        only uses individual motif length
+#        therefore wing_l can not be greater than
+#        the individual motif length being processed
+#    2. homotypic match wants larger wing size
+#       XXX: need to check match for matches
+#   if wing_l less than max motif length then larger motifs are
+#          ignored during processing? what happens? QQQ
 # QQQ: should wing_length be the number of elements to grab or the maximum index?
 #        ie motif_set.max_positions or motif_set.max_positions - 1
-wing_l = min( motif_set.max_positions, ws ) #max(motif_set.max_positions - 1, ws)
+wing_l = max(motif_set.max_positions, ws)
 print("Proceeding with wing_size: " + format(wing_l) + " vs defined ws(" + format(ws) + ")" )
 
 # Open output file.
@@ -842,14 +843,16 @@ for index in range(variant_set.length()):
     #    the individual iteration output was accumulated in a transient variable
     #    and the output (presuming PLE had any) was not previously assigned
     #
-    plusmatch = motif_set.process_local_env(bp, plusmatch, var_element, None, var_seq, ref_seq)
+    plusmatch = motif_set.process_local_env(bp, plusmatch, var_element,
+        None, var_seq, ref_seq, wing_l)
 
     # Calculate motif matches to reverse complement
     ref_seq_rc = var_element.return_full_ref_seq_reverse_complement(wing_l)
     var_seq_rc = var_element.return_full_var_seq_reverse_complement(wing_l)
     minusmatch = motif_set.motif_match(bp, ref_seq_rc, var_seq_rc, wing_l)
     # Add local environment data
-    minusmatch = motif_set.process_local_env(bp, minusmatch, var_element, None, var_seq_rc, ref_seq_rc)
+    minusmatch = motif_set.process_local_env(bp, minusmatch, var_element,
+        None, var_seq_rc, ref_seq_rc, wing_l)
 
     matches = plusmatch + minusmatch
     print(("\t" + format(var_element.name) + ":" + format(var_element.position) +
