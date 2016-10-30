@@ -50,6 +50,28 @@ class MotifArray:
 
         return
 
+    def element_positions_list(self, return_string):
+        """
+        debug function; return list of MotifArray motifElement position sizes
+        Args:
+            return_string (boolean): true --> return string; false --> return list
+        """
+        if return_string:
+            return_var = ""
+        else:
+            return_var = []
+
+        for me in self.motifs:
+            if return_string:
+                return_var = return_var + "," + format(me.positions)
+            else:
+                return_var.append(me.positions)
+
+        if return_string:
+            return_var.lstrip(",")    # drop leading ,
+
+        return return_var
+
     def join(self, motif_array2):
         """join another MotifArray object to this MotifArray object"""
 
@@ -187,7 +209,7 @@ class MotifArray:
             for pos in range(motif_element.positions):
                 # check match starting at position
                 # (score_motif will stop after the length of the motif)
-                pos_score = motif_element.motif_score(baseline_p, trim_seq[pos:])
+                pos_score = motif_element.score_motif(baseline_p, trim_seq[pos:])
                 if pos_score > max_score:
                     max_score = pos_score
                     match_seq = trim_seq[pos:pos + motif_element.positions]
@@ -230,7 +252,7 @@ class MotifArray:
 
         """
 
-        # Get GC content 
+        # Get GC content
         # ZZZ: faster to convert to upper then count? Yes, actually, it is:
         # python -m timeit -s "vseq = 'GACCtcagTc'" "vseq.count('g') + vseq.count('G')"
         # 1000000 loops, best of 3: 0.384 usec per loop
@@ -275,21 +297,21 @@ class MotifArray:
             # because variant and reference wings match only compute once
             # wing size = size of the motif matched?
             # CCC-JA: Yeah, this part of the code was/is a mess. He was rushing towards the end
-            #     to try to take into account homotypic matches and local GC content. I 
+            #     to try to take into account homotypic matches and local GC content. I
             #     couldn't really decipher what was going on and he had a lot of unused variables
             #     and such left in here. It also didn't actually work quite right if I remember
             #     correctly. Our default wing size was +/- 50 bp from the variant position to
             #     look for homotypic matches, and yes, they should NOT overlap the variant.
             #     I suppose they might, however, overlap each other, but that'll get confusing
-            #     in the output pretty quickly. If they overlap, best to just take the strongest 
+            #     in the output pretty quickly. If they overlap, best to just take the strongest
             #     match out of the overlaps and report that, I think.
             #
             #     GC content is pretty straightforward, just looking at % of bases in wings that are
             #     G or C in variant and reference sequences. Genuine TF binding sites tend to have
-            #     slightly higher than normal GC content (usually ~40% in non-coding regions). 
-            #     If it was say, 55-60% in the local area of the variant, it might lend a bit of 
+            #     slightly higher than normal GC content (usually ~40% in non-coding regions).
+            #     If it was say, 55-60% in the local area of the variant, it might lend a bit of
             #     credence towards it being a genuine binding site. Just another piece of info.
-            #     In summary, the original code was iffy, at best. 
+            #     In summary, the original code was iffy, at best.
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
             if True:    # no overlap version
                 left_wing = sequence.sub_from_left(seq_element.seq_left_wing.seq,
@@ -435,7 +457,17 @@ class MotifElement:
         return
 
     def clear(self):
-        self = self.__init__()    # ZZZ: note: self = probably not necessary
+        """
+        Resets current object;
+        YYY: WARNING! python seems to allow this
+            to affect previously assigned objects ie:
+            b = MotifElement()
+            c = MotifArray()
+            c.add_motif(b)
+            b.clear()    # also seems to clear info in c!
+
+        """
+        self.__init__()
         return
 
     def ht_matches_in(self, baseline_p, sequence_str):
@@ -475,12 +507,12 @@ class MotifElement:
     def score_base(self, probability, baseline_p):
         """
         compute the ... log likelihood ratio using log2
-        
+
         Args:
             2 number inputs: probability, baseline_p
         Returns:
             log likelihood ration ( probability/baseline_p)
-        
+
         YYY: note this could be outside the class  QQQ: why?
         """
         if (probability == 0):
@@ -589,18 +621,19 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
     Returns:
         MotifArray object = set of Motif sequences as MotifElement objects
         Each object in the array defines Motif characteristics
-        
+
 
         If reading multiple files use MotifArray join method on returned object
 
     YYY: The motif length for each TF is stored in MotifElement.positions
-         The wing length of the compared sequence is by length of 
+         The wing length of the compared sequence is by length of
          individual MotifElement not the max for all in the MotifArray
 
     """
 
     motif_set = MotifArray()
-    bad_motif_count = 0     # error if count exceeds 3
+    bad_motif_count = 0    # error if count exceeds 3
+    added_count = 0        # count of motifs added
 
     # Open and import motif file: note: with always closes open file
     with open(motif_filename) as file_handle:
@@ -609,7 +642,6 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
         # arrays for C, G, T - each with same format as A
         # 1 blank line separates each individual TF position weight matrix
         # reading files assumes {header,A,C,G,T,blankline} order
-        base_element = MotifElement()
 
         # index for line you are looking at in the motif matrix set (not file)
         i = 0
@@ -618,15 +650,18 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
         for line in file_handle:
 
             if line.startswith("#"):
-               # QQQ: should the file read in a header # marked
-               #      that specifies count or probability type?
-               continue;
-        
+                # QQQ: should the file read in a header # marked
+                #      that specifies count or probability type?
+                continue
+
             # First line contains id and name
             if i == 0:
                 # must first remove brackets and split on whitespace
                 line = line.strip().strip('[').strip(']').split()
 
+                base_element = MotifElement()    # move creation to here
+                                                 # prevents same object being tied to all
+                                                 # prevents clear from affecting motifArray
                 base_element.id = line[0]
                 base_element.name = line[1]
                     #print(format(i) + ":" + base_element.id + " " + base_element.name)    # DEBUG LINE
@@ -661,22 +696,26 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
                     #      then throw error. may be safer to throw error if
                     #      any errors are encountered (ie bad file format)
                     bad_motif_count = bad_motif_count + 1
-                    print('Reading ' + format(motif_filename) + 
+                    print(('Reading ' + format(motif_filename) +
                             ':\n\tdropping motif element ' +
-                            format(base_element.name) + '.' )
+                            format(base_element.name) + '.'))
                     if bad_motif_count > 2:
                         # XXX: throw an ERROR
                         print('Too many errors encountered. User input invalid')
                         raise ValueError('User defined motif file format invalid.')
-                    
+
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
+                added_count = added_count + 1
 
                 # reset the tracker variables
                 i = -1
-                base_element.clear()
+                #print(("before clear " + format(added_count) + ":" +
+                #    format(motif_set.element_positions_list(True))))
             i += 1
 
+    #print(("get_motifs read " + format(added_count) + " motifs from " + format(motif_filename)))
+    #print(("before return set " + format(motif_set.element_positions_list(True))))
     return motif_set
 
 def get_baseline_probs(baseline_f):
@@ -730,13 +769,13 @@ def get_baseline_probs(baseline_f):
               "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
               "\tContinuing with default probabilities: " + format(bp_array)))
         return bp_array
-        
+
 def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
     """
     Write file containing the set of motif TF. Read from frequency matrix file.
     Computes and returns probability matrices for each motif TF except
     those individual motifs deemed to be invalid.
-    
+
     XXX: function is incomplete
 
     Args:
@@ -754,12 +793,12 @@ def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
     Returns:
         MotifArray object = set of Motif sequences as MotifElement objects
         Each object in the array defines Motif characteristics
-        
+
 
         If reading multiple files use MotifArray join method on returned object
 
     YYY: The motif length for each TF is stored in MotifElement.positions
-         The wing length of the compared sequence is by length of 
+         The wing length of the compared sequence is by length of
          individual MotifElement not the max for all in the MotifArray
 
     """
@@ -774,7 +813,6 @@ def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
         # arrays for C, G, T - each with same format as A
         # 1 blank line separates each individual TF position weight matrix
         # reading files assumes {header,A,C,G,T,blankline} order
-        base_element = MotifElement()
 
         # index for line you are looking at in the motif matrix set (not file)
         i = 0
@@ -787,6 +825,7 @@ def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
                 # must first remove brackets and split on whitespace
                 line = line.strip().strip('[').strip(']').split()
 
+                base_element = MotifElement()
                 base_element.id = line[0]
                 base_element.name = line[1]
                     #print(format(i) + ":" + base_element.id + " " + base_element.name)    # DEBUG LINE
@@ -821,20 +860,20 @@ def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
                     #      then throw error. may be safer to throw error if
                     #      any errors are encountered (ie bad file format)
                     bad_motif_count = bad_motif_count + 1
-                    print('Reading ' + format(motif_filename) + 
+                    print('Reading ' + format(motif_filename) +
                             ':\n\tdropping motif element ' +
                             format(base_element.name) + '.' )
                     if bad_motif_count > 2:
                         # XXX: throw an ERROR
                         print('Too many errors encountered. User input invalid')
                         raise ValueError('User defined motif file format invalid.')
-                    
+
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
 
                 # reset the tracker variables
                 i = -1
-                base_element.clear()
+                base_element.clear()    # BAD IDEA
             i += 1
 
     return motif_set

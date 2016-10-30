@@ -852,6 +852,10 @@ for index in range(variant_set.length()):
     minusmatch = motif_set.process_local_env(bp, minusmatch, var_element, None, var_seq_rc, ref_seq_rc)
 
     matches = plusmatch + minusmatch
+    print(("\t" + format(var_element.name) + ":" + format(var_element.position) +
+        " +match(" + format(len(plusmatch)) +
+        ") + -match(" + format(len(minusmatch)) +
+        ") = matches(" + format(len(matches)) + ")"))
 
     # Update ChIP buffer for current position
     # Update matches array with peak overlap data
@@ -862,6 +866,7 @@ for index in range(variant_set.length()):
                                          matches, fileHan_out_chip,
                                          sorted_lex, filter_bed)
 
+    print(("matches number:" + format(len(matches))))
     """print("match_peaks returned "+str(len(peak_buffer))+" peak(s):")
     for peak in peak_buffer:
         (pchr, psta, pend, ptfs, pmms) = peak

@@ -50,19 +50,23 @@ def matrix(size):
     m[1] = s[:size]
     m[2] = s[:size]
     m[3] = s[:size]
+    return m
 
 
 def motif_element():
     me = motif.MotifElement()
     me.name = "chr37"
     me.matrix = matrix(5)
-    return
+    return me
 
 
 def test_checkvalid(motif_element):
     assert motif_element.check_valid() is True
     assert motif_element.positions == 5
 
+
+def test_motif_element(motif_element):
+    assert 1 == 1
 
 y = motif.MotifArray()
 for i in range(4):
@@ -123,3 +127,17 @@ x = motif.get_baseline_probs( 'notemptyfile' )
 #Where PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)
 #Continuing with default probabilities:[0.25, 0.25, 0.25, 0.25]
 x = motif.get_baseline_probs( 'notemptyfile_correct')
+
+
+import motif
+file_motif = '../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.txt'
+pc = 0.1
+th = 0.225
+bp = [0.27, 0.23, 0.28, 0.22]
+motif_set = motif.get_motifs(file_motif, pc, th, bp)
+x = motif_set.element_positions_list(False)
+assert x[0] == 9 and x[2] == 12 and x[641] == 12
+assert motif_set.length() == 641
+assert motif_set.motifs[1].base_probability == bp
+assert motif_set.motifs[1].base_probability == bp
+assert motif_set.motifs[1].name == 'AIRE'
