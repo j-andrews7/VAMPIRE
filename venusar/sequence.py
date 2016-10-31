@@ -158,6 +158,25 @@ class SequenceElement:
         self.seq_var.seq = variant_seq
         self.seq_ref.seq = reference_seq
 
+    def assign_int_versions(self):
+        """
+        call convert2int to compute the integer version of the 4 elements
+        (var, ref, left, right) and their reverse complements
+        assigns values.
+
+        WARNING: Assumes self.assign_rev_complement() was already called!
+        """
+        # convert the sequences to integers
+        self.seq_var.convert2int()
+        self.seq_ref.convert2int()
+        self.seq_left_wing.convert2int()
+        self.seq_right_wing.convert2int()
+        # convert the reverse complements to integers
+        self.seq_var.convert2int_rev_complement()
+        self.seq_ref.convert2int_rev_complement()
+        self.seq_left_wing.convert2int_rev_complement()
+        self.seq_right_wing.convert2int_rev_complement()
+
     def assign_rev_complement(self):
         """
         compute the reverse complement of the 4 elements (var, ref, left, right)
@@ -223,9 +242,9 @@ class SequenceElement:
 
         # check that reference sequence matches vcf's sequence for position
         returned_ref_b = surr_seq[wing_length:-wing_length]
-        print(("sequence: " + surr_seq + "\n\t" + returned_ref_b + "\n" +
-            "\tleft:  " + sub_from_start(surr_seq, wing_length) + "\n" +
-            "\tright: " + sub_from_end(surr_seq, wing_length) ))
+        #print(("sequence: " + surr_seq + "\n\t" + returned_ref_b + "\n" +
+        #    "\tleft:  " + sub_from_start(surr_seq, wing_length) + "\n" +
+        #    "\tright: " + sub_from_end(surr_seq, wing_length) ))
         if self.seq_ref.seq.upper() != returned_ref_b.upper():
             print(("**ERROR**\nVCF reference sequence for " +
                 self.name + " pos " + str(self.position) + ":\n\t\"" +
