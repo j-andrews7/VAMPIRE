@@ -815,7 +815,7 @@ for index in range(variant_set.length()):
     # Update previous, next, and current variables
     if (chromosome != var_element.name):
         chromosome = var_element.name
-        print("\tStart Analyzing new chromosome: " + chromosome + "...")
+        print("\tStart Analyzing new chromosome: " + chromosome + "(" + timeString() + ")")
 
     # -- prepare the variant for processing
     # 1. Get reference sequence surrounding the variant from the reference file

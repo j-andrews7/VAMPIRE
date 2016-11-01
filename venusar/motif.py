@@ -154,6 +154,58 @@ class MotifArray:
 
         return matches
 
+    def motif_match_int(self, baseline_p, ref_seq, var_seq, wing_l):
+        """
+        Takes a reference and variant sequence integer representation,
+        then checks for matches in the motif set.
+        Outputs match score for both ref seq and var seq
+        for any case where either matches above the motif element threshold.
+        (former name: match_motifs, wanted grouped in class function list)
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            ref_seq = Reference sequence integer representation (0-4 only)
+            var_seq = Variant sequence integer representation (0-4 only)
+            wing_l = Integer length of sequence of bases flanking the variant
+                (generally >= self.max_positions, should match value used to
+                create ref_seq and var_seq)
+
+        Returns: A list of MotifMatch objects
+        """
+
+        # scoring returns: motif match array with the form
+        #    (id, name, threshold, max_score, match_seq)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, True)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, True)
+
+        matches = []    # list of MotifMatch objects
+
+        # generate list of motifs that matched var seq to compare ref seq matches
+        for idx in range(len(scored)):
+            (iden, name, th, max_score, match_seq, motif_index) = scored[idx]
+            (rid, rname, rth, rmax_score, rmatch_seq, motif_index) = r_scored[idx]
+            if (max_score >= th or rmax_score >= rth):
+                if (iden != rid or name != rname or th != rth):
+                    print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
+                          iden + " != " + rid +
+                          " or " + name + " != " + rname +
+                          " or " + format(th) + " != " + format(rth)))
+                # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
+                match = MotifMatch(name, max_score, rmax_score, motif_index)
+                matches.append(match)
+
+        # output variant seq matches vs ref seq matches
+        """for m in matches:
+            line = "Variant matched motif "+m[1]+" ("+m[0]+") with score "
+            line+= str(m[2])[:6]+" at seq: "+m[3]+"\nReference matched motif "+m[1]
+            line+= "           with score "+str(m[4])[:6]+" at seq: "+m[5]
+            #debug line+= "\n\tRefseq: "+ref_seq+"\n\tVarseq: "+var_seq
+            print(line,file=output_f)"""    # WARNING: debug using undefined global
+
+        return matches
+
     def motif_scores(self, baseline_p, sequence_str, wing_l, normalize):
         """
         Calculate if any motifs in the motif list match the given sequence.
@@ -210,6 +262,79 @@ class MotifArray:
                 # check match starting at position
                 # (score_motif will stop after the length of the motif)
                 pos_score = motif_element.score_motif(baseline_p, trim_seq[pos:])
+                if pos_score > max_score:
+                    max_score = pos_score
+                    match_seq = trim_seq[pos:pos + motif_element.positions]
+
+            if normalize:
+                max_score = max_score / motif_element.positions
+
+            # debug print("Max match score:"+str(max_score)+" for motif "+name+" and
+            # sequence "+match_seq+".")
+            tupl = (motif_element.id, motif_element.name,
+                    motif_element.threshold, max_score, match_seq, motif_index)
+            scores.append(tupl)
+
+        return scores
+
+    def motif_scores_int(self, baseline_p, sequence_int, wing_l, normalize):
+        """
+        Calculate if any motifs in the motif list match the given sequence.
+        Requires that no motif have a length of 0.
+        (former name: score_motifs, wanted grouped in class function list)
+        This version uses integer representations of the sequence
+
+        #Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_int = array of characters (strings 'A','C','G', or 'T')
+            wing_l = length of sequence of bases flanking the variant
+            normalize = boolean, if true then divide score by motif length
+                concern: if not normalized, longer motifs can generate higher
+                scores by length not true matches.
+
+        Returns:
+            matches = array of scores of the form:
+                ( id,  name,  threshold,  max_score,  match_seq,  motif_index )
+
+        """
+        # list of matches between motifs and sequence
+        scores = []
+
+        for motif_index in range(len(self.motifs)):
+            #### (iden, name, thresh, p_matrix) = tup
+            motif_element = self.motifs[motif_index]
+
+            # -- prepare the motif element and sequence string for scoring
+            if not motif_element.valid_flag:
+                continue
+
+            if motif_element.matrix_type == 0:
+                # need to calculate base occurence frequency by position. why
+                # didn't it do this during insertion? will call many times here
+                print("motif_scores: probabilities not previously calculated for " +
+                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                motif_element.calculate_probabilities()
+
+            # trim flanking bases to one less than motif length
+            # number of bases to trim
+            trim_amount = wing_l - motif_element.positions + 1
+            trim_seq = sequence.crop_from_left(sequence_int, trim_amount)
+            trim_seq = sequence.crop_from_right(trim_seq, trim_amount)
+
+            # -- actually do the scoring
+            # highest match score for this motif (based on starting position)
+            max_score = float("-inf")
+            # sequence that matched motif best
+            match_seq = ""
+
+            # check match to all positions where motif overlaps with variant
+            # XXX: convolution has to be faster; then just pull peaks
+            for pos in range(motif_element.positions):
+                # check match starting at position
+                # (score_motif will stop after the length of the motif)
+                pos_score = motif_element.score_motif_int(baseline_p, trim_seq[pos:])
                 if pos_score > max_score:
                     max_score = pos_score
                     match_seq = trim_seq[pos:pos + motif_element.positions]
@@ -545,6 +670,42 @@ class MotifElement:
             elif (sequence_str[pos] == 'T' or sequence_str[pos] == 't'):
                 score += self.score_base(self.matrix[3][pos], baseline_p[3])
             # else is score = 0 therefore do nothing
+
+        return score
+
+    def score_motif_int(self, baseline_p, sequence_int):
+        """
+        Calculate match between probability matrix for MotifElement and the
+            given sequence_int representation starting at the beginning of
+            the sequence and ending after the length of the motif.
+
+        Args:
+            p_matrix = probability matrix where rows are bases (A,C,G,T) and columns
+                are probabilities (that sum to 1) at a given position. All rows should
+                be the same length.
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_int = integers 0-5 for N ACGT
+
+        Returns:
+            Match score between probability matrix and sequence_str
+        """
+
+        score = 0
+
+        if len(sequence_int) < self.positions:
+            print("Sequence shorter than probability matrix. Returning score of 0.")
+            return score
+
+        if not self.valid_flag or self.matrix_type != 1:
+            return score
+
+        for pos in range(self.positions):
+            # Match base: compute score for each overlap position
+            ind = sequence_int[pos] - 1
+            if ind >= 0:
+                score += self.score_base(self.matrix[ind][pos], baseline_p[0])
 
         return score
 

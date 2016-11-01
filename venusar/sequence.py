@@ -167,10 +167,10 @@ class SequenceElement:
         WARNING: Assumes self.assign_rev_complement() was already called!
         """
         # convert the sequences to integers
-        self.seq_var.convert2int()
-        self.seq_ref.convert2int()
-        self.seq_left_wing.convert2int()
-        self.seq_right_wing.convert2int()
+        self.seq_var.convert2int_sequence()
+        self.seq_ref.convert2int_sequence()
+        self.seq_left_wing.convert2int_sequence()
+        self.seq_right_wing.convert2int_sequence()
         # convert the reverse complements to integers
         self.seq_var.convert2int_rev_complement()
         self.seq_ref.convert2int_rev_complement()
@@ -288,6 +288,23 @@ class SequenceElement:
         build_seq += sub_from_start(self.seq_right_wing.seq, wing_length)
         return build_seq
 
+    def return_full_seq_int(self, sequence_int, wing_length):
+        """
+        return sequence to process with wings attached. Uses sub_from_end and
+        sub_from_start methods to reduce wing sizes to requested length.
+        This is the integer version
+
+        Arguments:
+            sequence should be the core sequence
+            wing_length = integer number of characters to use from the wing seq
+        Returns:
+            integer representation of left wing + sequence + right wings
+        """
+        build_seq = sub_from_end(self.seq_left_wing.seq_int, wing_length)
+        build_seq += sequence_int
+        build_seq += sub_from_start(self.seq_right_wing.seq_int, wing_length)
+        return build_seq
+
     def return_full_seq_reverse_complement(self, sequence_str, wing_length):
         """
         return sequence to process with wings attached. Uses sub_from_end and
@@ -312,12 +329,26 @@ class SequenceElement:
         """
         return self.return_full_seq(self.seq_ref.seq, wing_length)
 
+    def return_full_ref_seq_int(self, wing_length):
+        """
+        return reference integer representation to process
+        from seq_ref and wings cropped to the specified length
+        """
+        return self.return_full_seq_int(self.seq_ref.seq_int, wing_length)
+
     def return_full_var_seq(self, wing_length):
         """
         return variant string to process from seq_var and wings cropped to
         the specified length
         """
         return self.return_full_seq(self.seq_var.seq, wing_length)
+
+    def return_full_var_seq_int(self, wing_length):
+        """
+        return variant integer representation to process
+        from seq_var and wings cropped to the specified length
+        """
+        return self.return_full_seq_int(self.seq_var.seq_int, wing_length)
 
     def return_full_ref_seq_reverse_complement(self, wing_length):
         """

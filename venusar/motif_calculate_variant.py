@@ -4,6 +4,7 @@ import sequence
 import motif
 import time
 from pyfaidx import Fasta
+import pdb    # necessary for debugger; use pdb.set_trace()
 
 def timeString():
     """ Return time as a string YearMonthDay.Hour.Minute.Second
@@ -24,7 +25,7 @@ fa_ind = Fasta(file_reference_genome)
 
 print(("Importing the variants " + timeString()))
 wing_l = 50
-file_input = '../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf'
+file_input = '../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED-head160.vcf'
 
 # read variant file variant set without printing header information
 variant_set = sequence.SequenceArray()
@@ -97,15 +98,25 @@ plusmatch = motif_set.motif_match(bp, ref_seq, var_seq, wing_l)
 t2 = time.time()
 print(("Processing time for original: " + format(t2 - t1)))
 
-return -1    # XXX: incomplete
-t1 = time.time()
-var_element.assign_int_versions()
-ref_seq = var_element.return_full_ref_seq(wing_l)    # need integer version
-var_seq = var_element.return_full_var_seq(wing_l)
-plusmatch = motif_set.motif_match(bp, ref_seq, var_seq, wing_l)    # need integer version
-t2 = time.time()
-print(("Processing time for original: " + format(t2 - t1)))
 
+t3 = time.time()
+var_element.assign_int_versions()
+ref_seq = var_element.return_full_ref_seq_int(wing_l)    # need integer version
+var_seq = var_element.return_full_var_seq_int(wing_l)
+plusmatch_int = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)    # need integer version
+# XXX will need reverse complement versions of integers later
+t4 = time.time()
+print(("Processing time for replacement including conversion time: " + format(t4 - t3)))
+
+print(("comparison ref score [" +
+    format(plusmatch[1].ref_score) +
+    "] to [" + format(plusmatch_int[1].ref_score) + "]"))
+
+print(("comparison var score [" +
+    format(plusmatch[1].ref_score) +
+    "] to [" + format(plusmatch_int[1].ref_score) + "]"))
+
+pdb.set_trace()
 
 
 
