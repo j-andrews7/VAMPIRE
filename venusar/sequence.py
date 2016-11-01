@@ -554,6 +554,10 @@ def read_line2sample_dictionaries(headerString):
         it will break this dictionary build method as you noted
         it will break lists in function
         QQQ: append .1, .2, .N to each column header to make names unique?
+        CCC-JA: The names are 'unique', as they already have additions similar to
+            what you propose. If you look at the header of our input vcf, each 
+            sample column header is in the format of {extra_info}.sample_name, but
+            there are multiple columns with the same sample_name.
     """
 
     samplesByName = {}
