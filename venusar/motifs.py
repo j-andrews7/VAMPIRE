@@ -837,6 +837,9 @@ for index in range(variant_set.length()):
     var_element.assign_int_versions()
     ref_seq = var_element.return_full_ref_seq_int(wing_l)
     var_seq = var_element.return_full_var_seq_int(wing_l)
+    print("\tref int: " + format(ref_seq) +
+          "\n\tvar int: " + format(var_seq))
+    print("start motif_match_int")
     plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)
     #     plusmatch returns an list of MotifMatch objects
     # Add local environment data: XXX: new version guessed intent see code
@@ -844,14 +847,19 @@ for index in range(variant_set.length()):
     #    the individual iteration output was accumulated in a transient variable
     #    and the output (presuming PLE had any) was not previously assigned
     #
+    print("start process_local_env_int")
     plusmatch = motif_set.process_local_env_int(bp, plusmatch, var_element,
         None, var_seq, ref_seq, wing_l)
 
     # Calculate motif matches to reverse complement
-    ref_seq_rc = var_element.return_full_seq_reverse_complement_int(wing_l)
-    var_seq_rc = var_element.return_full_seq_reverse_complement_int(wing_l)
+    ref_seq_rc = var_element.return_full_ref_seq_reverse_complement_int(wing_l)
+    var_seq_rc = var_element.return_full_var_seq_reverse_complement_int(wing_l)
+    print("\tref rc int: " + format(ref_seq) +
+          "\n\tvar rc int: " + format(var_seq))
+    print("start motif_match_int reverse complement")
     minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
     # Add local environment data
+    print("start process_local_env_int reverse complement")
     minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,
         None, var_seq_rc, ref_seq_rc, wing_l)
 
@@ -865,6 +873,7 @@ for index in range(variant_set.length()):
     # Update matches array with peak overlap data
     #    WARNING: XXX: match_peaks has not been heavily reviewed for validity
     #    note: fileHan_chip is only read by children of match_peaks
+    print("starting match_peaks")
     (peak_buffer, matches) = match_peaks(var_element.name, var_element.position,
                                          peak_buffer, fileHan_chip,
                                          matches, fileHan_out_chip,

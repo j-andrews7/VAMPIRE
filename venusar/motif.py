@@ -711,9 +711,9 @@ class MotifArray:
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
 
             # -- no overlap version
-            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
+            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq_int, wing_l)
                 #match_motif.positions)
-            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
+            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq_int, wing_l)
                 #match_motif.positions)
             vh_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
             vh_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
@@ -866,7 +866,7 @@ class MotifElement:
         """
         homotypic_matches = []
         for pos in range(len(sequence_str) - self.positions + 1):
-            pos_score = self.score_motif(baseline_p, sequence_str[pos:pos + self.positions])
+            pos_score = self.score_motif(baseline_p, sequence_str[pos:])    # YYY assumes sequence_str can be longer
             # Return the homotypic match if it is above the threshold
             # QQQ should this code normalize? see also YYY20161113.001
             if pos_score > self.threshold:
@@ -889,7 +889,7 @@ class MotifElement:
         """
         homotypic_matches = []
         for pos in range(len(sequence_int) - self.positions + 1):
-            pos_score = self.score_motif_int(baseline_p, sequence_int[pos:pos + self.positions])
+            pos_score = self.score_motif_int(baseline_p, sequence_int[pos:])    # YYY assumes sequence_int can be longer
             # Return the homotypic match if it is above the threshold
             # QQQ should this code normalize? see also YYY20161113.001
             if pos_score > self.threshold:
@@ -1001,6 +1001,7 @@ class MotifElement:
         if not self.valid_flag or self.matrix_type != 1:
             return score
 
+        #print(("score_motif_int: " + self.name + " seq: " + format(sequence_int)))
         for pos in range(self.positions):
             # Match base: compute score for each overlap position
             ind = sequence_int[pos] - 1

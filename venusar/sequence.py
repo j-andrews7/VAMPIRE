@@ -374,12 +374,26 @@ class SequenceElement:
         """
         return self.return_full_seq(self.seq_ref.seq_rev_complement, wing_length)
 
+    def return_full_ref_seq_reverse_complement_int(self, wing_length):
+        """
+        return the reverse complement of the reference string to process
+        built from from seq_ref and wings cropped to specified length
+        """
+        return self.return_full_seq_int(self.seq_ref.seq_rev_complement_int, wing_length)
+
     def return_full_var_seq_reverse_complement(self, wing_length):
         """
         return the reverse complement of the variant string to process
         built from from seq_var and wings cropped to specified length
         """
         return self.return_full_seq(self.seq_var.seq_rev_complement, wing_length)
+
+    def return_full_var_seq_reverse_complement_int(self, wing_length):
+        """
+        return the reverse complement of the variant string to process
+        built from from seq_var and wings cropped to specified length
+        """
+        return self.return_full_seq_int(self.seq_var.seq_rev_complement_int, wing_length)
 
 
 class SequenceStr:
