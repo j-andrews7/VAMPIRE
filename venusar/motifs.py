@@ -805,7 +805,7 @@ print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 peak_buffer = []
 chromosome = ""    # processed chromosome
 for index in range(variant_set.length()):
-    var_element = variant_set.seq[index]
+    var_element = variant_set.seq[index]    # XXX: WARNING: changes made to element not saved
 
     # QQQ: separate variant and multivariant test sets?
     #    test for and only analyze if index not in variant_set.multivariant
@@ -834,24 +834,25 @@ for index in range(variant_set.length()):
 
     # -- building the list of MotifMatch objects
     # Calculate motif matches to variant sequence
-    ref_seq = var_element.return_full_ref_seq(wing_l)
-    var_seq = var_element.return_full_var_seq(wing_l)
-    plusmatch = motif_set.motif_match(bp, ref_seq, var_seq, wing_l)
+    var_element.assign_int_versions()
+    ref_seq = var_element.return_full_ref_seq_int(wing_l)
+    var_seq = var_element.return_full_var_seq_int(wing_l)
+    plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)
     #     plusmatch returns an list of MotifMatch objects
     # Add local environment data: XXX: new version guessed intent see code
     #    the process_local_env function never returned anything before
     #    the individual iteration output was accumulated in a transient variable
     #    and the output (presuming PLE had any) was not previously assigned
     #
-    plusmatch = motif_set.process_local_env(bp, plusmatch, var_element,
+    plusmatch = motif_set.process_local_env_int(bp, plusmatch, var_element,
         None, var_seq, ref_seq, wing_l)
 
     # Calculate motif matches to reverse complement
-    ref_seq_rc = var_element.return_full_ref_seq_reverse_complement(wing_l)
-    var_seq_rc = var_element.return_full_var_seq_reverse_complement(wing_l)
-    minusmatch = motif_set.motif_match(bp, ref_seq_rc, var_seq_rc, wing_l)
+    ref_seq_rc = var_element.return_full_seq_reverse_complement_int(wing_l)
+    var_seq_rc = var_element.return_full_seq_reverse_complement_int(wing_l)
+    minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
     # Add local environment data
-    minusmatch = motif_set.process_local_env(bp, minusmatch, var_element,
+    minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,
         None, var_seq_rc, ref_seq_rc, wing_l)
 
     matches = plusmatch + minusmatch

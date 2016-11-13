@@ -322,6 +322,23 @@ class SequenceElement:
         build_seq += sub_from_end(self.seq_left_wing.seq_rev_complement, wing_length)
         return build_seq
 
+    def return_full_seq_reverse_complement_int(self, sequence_int, wing_length):
+        """
+        return sequence to process with wings attached. Uses sub_from_end and
+        sub_from_start methods to reduce wing sizes to requested length.
+
+        Arguments:
+            sequence should be the reverse complement of the core sequence
+            wing_length = integer number of characters to use from the wing seq
+        Returns:
+            For all strings the reverse complement returns
+            string of right wing + sequence string + left wings
+        """
+        build_seq = sub_from_start(self.seq_right_wing.seq_rev_complement_int, wing_length)
+        build_seq += sequence_int
+        build_seq += sub_from_end(self.seq_left_wing.seq_rev_complement_int, wing_length)
+        return build_seq
+
     def return_full_ref_seq(self, wing_length):
         """
         return reference string to process from seq_ref and wings cropped to
@@ -554,10 +571,6 @@ def read_line2sample_dictionaries(headerString):
         it will break this dictionary build method as you noted
         it will break lists in function
         QQQ: append .1, .2, .N to each column header to make names unique?
-        CCC-JA: The names are 'unique', as they already have additions similar to
-            what you propose. If you look at the header of our input vcf, each 
-            sample column header is in the format of {extra_info}.sample_name, but
-            there are multiple columns with the same sample_name.
     """
 
     samplesByName = {}

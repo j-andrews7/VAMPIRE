@@ -122,6 +122,8 @@ class MotifArray:
                 create ref_seq and var_seq)
 
         Returns: A list of MotifMatch objects
+
+        see also: motif_match_int
         """
 
         # scoring returns: motif match array with the form
@@ -174,6 +176,8 @@ class MotifArray:
                 create ref_seq and var_seq)
 
         Returns: A list of MotifMatch objects
+
+        see also: motif_match
         """
 
         # scoring returns: motif match array with the form
@@ -281,6 +285,7 @@ class MotifArray:
             matches = array of scores of the form:
                 ( id,  name,  threshold,  max_score,  match_seq,  motif_index )
 
+        see also: motif_scores_int
         """
         # list of matches between motifs and sequence
         scores = []
@@ -323,8 +328,8 @@ class MotifArray:
 
             if normalize:
                 max_score = max_score / motif_element.positions
-                # YYY: not sure if this is the correct way to handle threshold when normalizing
-                #    the user may expect the value to be entered directly
+                # YYY20161113.001: not sure if this is the correct way to handle threshold
+                #    when normalizing the user may expect the value to be entered directly
                 motif_threshold = motif_element.threshold / motif_element.positions
             else:
                 motif_threshold = motif_element.threshold
@@ -358,6 +363,7 @@ class MotifArray:
             matches = array of scores of the form:
                 ( id,  name,  threshold,  max_score,  match_seq,  motif_index )
 
+        see also: motif_scores
         """
         # list of matches between motifs and sequence
         scores = []
@@ -394,15 +400,16 @@ class MotifArray:
             for pos in range(motif_element.positions):
                 # check match starting at position
                 # (score_motif will stop after the length of the motif)
-                pos_score = motif_element.score_motif_int(baseline_p, trim_seq[pos:])
+                current_seq = trim_seq[pos:pos + motif_element.positions]
+                pos_score = motif_element.score_motif_int(baseline_p, current_seq)
                 if pos_score > max_score:
                     max_score = pos_score
-                    match_seq = trim_seq[pos:pos + motif_element.positions]
+                    match_seq = current_seq
 
             if normalize:
                 max_score = max_score / motif_element.positions
-                # YYY: not sure if this is the correct way to handle threshold when normalizing
-                #    the user may expect the value to be entered directly
+                # YYY20161113.001: not sure if this is the correct way to handle threshold
+                #    when normalizing the user may expect the value to be entered directly
                 motif_threshold = motif_element.threshold / motif_element.positions
             else:
                 motif_threshold = motif_element.threshold
@@ -494,8 +501,8 @@ class MotifArray:
 
             if normalize:
                 max_score = max_score / motif_element.positions
-                # YYY: not sure if this is the correct way to handle threshold when normalizing
-                #    the user may expect the value to be entered directly
+                # YYY20161113.001: not sure if this is the correct way to handle threshold
+                #    when normalizing the user may expect the value to be entered directly
                 motif_threshold = motif_element.threshold / motif_element.positions
             else:
                 motif_threshold = motif_element.threshold
@@ -534,6 +541,7 @@ class MotifArray:
             it is not clear what its intended functionality is/was
             review call usage & code generated based on assumptions/logic leaps.
 
+        see also: process_local_env_int
         """
 
         # Get GC content
@@ -604,6 +612,112 @@ class MotifArray:
                 #match_motif.positions)
             vh_matches = match_motif.ht_matches_in(baseline_p, left_wing)
             vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
+            # same strings so variant and ref homotypic matches are equal
+            rh_matches = vh_matches
+
+            # Update the match information
+            matches[matches_index].var_ht = vh_matches
+            matches[matches_index].var_gc = var_gc
+            matches[matches_index].ref_ht = rh_matches
+            matches[matches_index].ref_gc = ref_gc
+
+        # Finding co-binders currently not implemented
+
+        return matches
+
+    def process_local_env_int(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l):
+        """
+        Integer sequence based version
+        Finds GC content, weak homotypic matches, and motif matches for
+            co-binding transcription factors (not currently implemented).
+        Homotypic match found by scoring wings only no overlap with variant
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            matches = list of MotifMatch objects, generated by motif_match()
+            seq_element = SequenceElement object v_seq and r_seq belong to
+            co_binders = dictionary that lists co-binding transcription factors for
+                a given transcription factor name [feature not enabled. Use None]
+            v_seq = variant sequence array of integers (0-5)
+            r_seq = reference sequence array of integers (0-5)
+            wing_l = integer wing length to override individual motif length
+
+        Returns: Updates matches the list of MotifMatch objects
+
+        XXX: WARNING: ERROR: this function was confusing class and other
+            elements of the match
+        XXX: this function never properly updated class elements;
+            it is not clear what its intended functionality is/was
+            review call usage & code generated based on assumptions/logic leaps.
+
+        see also: process_local_env
+        """
+
+        # Get GC content: counting the numeric equivalent see sequence.convert2int
+        #    marginally faster as two separate lines than 1 line with () / len()
+        gc = v_seq.count(2) + v_seq.count(3)
+        var_gc = gc / len(v_seq)
+
+        r_seq = r_seq.upper()
+        gc = r_seq.count(2) + r_seq.count(3)
+        ref_gc = gc / len(r_seq)
+
+        # Get list of motifs that matched
+        for matches_index in range(len(matches)):
+            # matches[matches_index]    # XXX
+            match_index = matches[matches_index].motif_array_index
+            if match_index < 0 or match_index > self.length():
+                print(("**Error** process_local_env unable to find motif " +
+                    matches[matches_index].name + " in MotifArray."))
+                continue
+
+            # motif info
+            #self.motifs[match_index].matrix
+            #self.motifs[match_index].threshold
+            match_motif = self.motifs[match_index]
+
+            # Find homotypic variant and reference matches
+            vh_matches = []
+            rh_matches = []
+
+            # YYY!: original code and comments confusing:
+            #    if homotopic matches are not supposed to overlap then...
+            #    why does code in motifs.py do wing size 1 less than max positions?
+            #    why did the original code below compute variant and reference
+            #        matches against wings when if they don't overlap then same?
+            #
+            # ZZZ: which of the following should be used!?! (answer no overlap version)
+            #   Check each wing separately,
+            #   homotypic matches should not overlap the variant
+            #   because variant and reference wings match only compute once
+            #   wing size = size of the motif matched?
+            # CCC-JA: Yeah, this part of the code was/is a mess. He was rushing towards the end
+            #     to try to take into account homotypic matches and local GC content. I
+            #     couldn't really decipher what was going on and he had a lot of unused variables
+            #     and such left in here. It also didn't actually work quite right if I remember
+            #     correctly. Our default wing size was +/- 50 bp from the variant position to
+            #     look for homotypic matches, and yes, they should NOT overlap the variant.
+            #     I suppose they might, however, overlap each other, but that'll get confusing
+            #     in the output pretty quickly. If they overlap, best to just take the strongest
+            #     match out of the overlaps and report that, I think.
+            #
+            #     GC content is pretty straightforward, just looking at % of bases in wings that are
+            #     G or C in variant and reference sequences. Genuine TF binding sites tend to have
+            #     slightly higher than normal GC content (usually ~40% in non-coding regions).
+            #     If it was say, 55-60% in the local area of the variant, it might lend a bit of
+            #     credence towards it being a genuine binding site. Just another piece of info.
+            #     In summary, the original code was iffy, at best.
+            # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
+
+            # -- no overlap version
+            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
+                #match_motif.positions)
+            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
+                #match_motif.positions)
+            vh_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
+            vh_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
             # same strings so variant and ref homotypic matches are equal
             rh_matches = vh_matches
 
@@ -749,11 +863,36 @@ class MotifElement:
         Returns:
 
         see also: MotifArray.motif_scores()
+        see also: ht_matches_in_int
         """
         homotypic_matches = []
         for pos in range(len(sequence_str) - self.positions + 1):
-            pos_score = self.score_motif(baseline_p, sequence_str[pos:])
+            pos_score = self.score_motif(baseline_p, sequence_str[pos:pos + self.positions])
             # Return the homotypic match if it is above the threshold
+            # QQQ should this code normalize? see also YYY20161113.001
+            if pos_score > self.threshold:
+                homotypic_matches.append(pos_score)
+        return homotypic_matches
+
+    def ht_matches_in_int(self, baseline_p, sequence_int):
+        """
+        Compute homotypic matches (scores above threshold) in the given sequence
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            sequence_int = array of integers (0-5)
+        Returns:
+
+        see also: MotifArray.motif_scores()
+        see also: ht_matches_in
+        """
+        homotypic_matches = []
+        for pos in range(len(sequence_int) - self.positions + 1):
+            pos_score = self.score_motif_int(baseline_p, sequence_int[pos:pos + self.positions])
+            # Return the homotypic match if it is above the threshold
+            # QQQ should this code normalize? see also YYY20161113.001
             if pos_score > self.threshold:
                 homotypic_matches.append(pos_score)
         return homotypic_matches
@@ -806,6 +945,8 @@ class MotifElement:
 
         Returns:
             Match score between probability matrix and sequence_str
+
+        see also: score_motif_int
         """
 
         score = 0
@@ -848,6 +989,8 @@ class MotifElement:
 
         Returns:
             Match score between probability matrix and sequence_str
+
+        see also: score_motif
         """
 
         score = 0
