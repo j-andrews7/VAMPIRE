@@ -660,7 +660,6 @@ class MotifArray:
         gc = v_seq.count(2) + v_seq.count(3)
         var_gc = gc / len(v_seq)
 
-        r_seq = r_seq.upper()
         gc = r_seq.count(2) + r_seq.count(3)
         ref_gc = gc / len(r_seq)
 
