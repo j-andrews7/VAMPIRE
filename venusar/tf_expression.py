@@ -275,7 +275,4 @@ if __name__ == '__main__':
     out_file = args.output_file
     th = args.threshold
 
-    t1 = time.time()
     main(inp_file, exp_file, out_file, th)
-    t2 = time.time()
-    print(("Processing time for new tf_expression: " + format(t2 - t1)))
