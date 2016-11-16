@@ -13,7 +13,7 @@ Args:
 """
 import sys
 import argparse
-
+import time
 
 def parse_header(line):
     """
@@ -60,42 +60,43 @@ def filter_motifs(motifs, gene_dict, thresh):
 
         try:
             # TODO - Try to handle complexes and such - 'ATX::TCF3', etc.
-            exp_vals = gene_dict[item]
+            exp_vals = gene_dict[item]    # this is the line that must be in try
+
+            # Check if any of the expression values meet the threshold.
+            for x in exp_vals:
+                if float(x) >= thresh:
+                    pass_th = True
+                    indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
+                    for x in indices:
+                        if x not in passed:
+                            passed.append(x)
+                    break    # breaks out of x in exp_vals
+
         except:
             # TODO - Add option to retain motifs that don't match a gene in the expression file.
-            indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
-            for x in indices:
-                if x not in failed:
-                    failed.append(x)
-            continue
-
-        # Check if any of the expression values meet the threshold.
-        for x in exp_vals:
-            if float(x) >= thresh:
-                pass_th = True
-                indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
-                for x in indices:
-                    if x not in passed:
-                        passed.append(x)
-                break
+            pass_th = False
 
         if pass_th is False:
             indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
             for x in indices:
                 if x not in failed:
                     failed.append(x)
+
     return (passed, failed)
 
 
-def process_line(line, output_f, gene_dict, thresh):
+def process_line(line, gene_dict, thresh):
     """
-    Process a vcf record and print to output.
+    Process a vcf record and return modified version of input line for output
+    Returning line rather than direct print enable later integration with
+    process stack class elements.
 
     Args:
         line (str): Line to parse.
-        output_f (file object): Output file.
         gene_dict (dict): Dict with gene names as keys and expression values for samples in vcf as values.
         thresh (float): Expression threshold that TFs must meet to be included in output.
+    Returns:
+        modified version of input line
     """
     line = line.strip()
     line_list = line.split("\t")
@@ -148,12 +149,11 @@ def process_line(line, output_f, gene_dict, thresh):
 
     line_list[7] = new_info_fields
     new_line = "\t".join(line_list)  # New, filtered output line.
-    print(new_line, file=output_f)
 
-    return
+    return new_line
 
 
-def get_genes(exp_file, samples, threshold):
+def get_genes(exp_file, samples, threshold, max_only):
     """
     Reads in and parses the .bed expression file.
 
@@ -161,31 +161,57 @@ def get_genes(exp_file, samples, threshold):
         exp_file (str): Name of expression file.
         samples (list): Names of the samples in the vcf file.
         threshold (float): Expression threshold to filter lowly/unexpressed genes.
+        max_only (bool): if true, gene_dict value is 1 value = max expression
+            if false gene_dict value is list of expression values
+            YYY: WARNING: if want list to have meaning
+                then values needs to be tied to header sample names
 
     Returns:
-        gene_dict (dict): {gene_name: [expression_vals]}. Only include values for samples in the vcf.
+        gene_dict (dict): {gene_name: [expression_vals]}.
+            Only include values for samples in the vcf.
     """
     data_cols = []
     gene_dict = {}
 
-    with open(exp_file) as f:
-        header = f.readline().strip().split('\t')
-        for samp in header[4:]:
-            if samp in samples:
-                data_idx = header.index(samp)
-                data_cols.append(data_idx)
+    if max_only:
+        # read and only return max exp value in gene_dict
+        with open(exp_file) as f:
+            header = f.readline().strip().split('\t')
+            for samp in header[4:]:
+                if samp in samples:
+                    data_idx = header.index(samp)
+                    data_cols.append(data_idx)
 
-        # Read in expression levels for each gene.
-        for line in f:
-            line = line.strip().split('\t')
-            gene_name = line[3].upper()
-            exp_vals = []
-            for idx in data_cols:
-                exp_vals.append(line[idx])
+            # Read in expression levels for each gene.
+            for line in f:
+                line = line.strip().split('\t')
+                gene_name = line[3].upper()
+                exp_val = -1e1000
+                for idx in data_cols:
+                    if line[idx] > exp_val:
+                        exp_val = line[idx]
 
-            gene_dict[gene_name] = exp_vals
+                gene_dict[gene_name] = exp_val
+    else:
+        # read and return exp value list in gene_dict
+        with open(exp_file) as f:
+            header = f.readline().strip().split('\t')
+            for samp in header[4:]:
+                if samp in samples:
+                    data_idx = header.index(samp)
+                    data_cols.append(data_idx)
 
-        return gene_dict
+            # Read in expression levels for each gene.
+            for line in f:
+                line = line.strip().split('\t')
+                gene_name = line[3].upper()
+                exp_vals = []
+                for idx in data_cols:
+                    exp_vals.append(line[idx])
+
+                gene_dict[gene_name] = exp_vals
+
+    return gene_dict
 
 
 def main(inp_file, exp_file, out_file, th=5):
@@ -216,7 +242,7 @@ def main(inp_file, exp_file, out_file, th=5):
         print(line, file=output_f)
 
         print("Creating gene dictionary for expression data.")
-        gene_dict = get_genes(exp_file, samples, th)
+        gene_dict = get_genes(exp_file, samples, th, True)
 
         if len(gene_dict) == 0:
             print("Error, no genes above threshold found in expression file.",
@@ -226,7 +252,9 @@ def main(inp_file, exp_file, out_file, th=5):
 
         print("Filtering motif info for TFs that don't meet the expression threshold of " + str(th) + ".")
         for line in vcf:
-            process_line(line, output_f, gene_dict, th)
+            new_line = process_line(line, gene_dict, th)
+            if new_line is not None:
+                print(new_line, file=output_f)
 
     output_f.close()
     print("COMPLETE.")
@@ -247,4 +275,7 @@ if __name__ == '__main__':
     out_file = args.output_file
     th = args.threshold
 
+    t1 = time.time()
     main(inp_file, exp_file, out_file, th)
+    t2 = time.time()
+    print(("Processing time for new tf_expression: " + format(t2 - t1)))
