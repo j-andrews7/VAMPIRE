@@ -30,7 +30,6 @@ import sys
 import argparse
 import motif
 import time
-import pdb    # necessary for debugger; use pdb.set_trace()
 
 parser = argparse.ArgumentParser(usage=__doc__)
 
@@ -63,7 +62,6 @@ if args.threshold is not None:
 else:
     d_th = None
 ow = args.overwrite is not None
-pdb.set_trace()
 fpr = float(args.false_pos_rate)
 pe = int(args.precision_exp)
 if pe > 5:
