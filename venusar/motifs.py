@@ -854,8 +854,8 @@ for index in range(variant_set.length()):
     # Calculate motif matches to reverse complement
     ref_seq_rc = var_element.return_full_ref_seq_reverse_complement_int(wing_l)
     var_seq_rc = var_element.return_full_var_seq_reverse_complement_int(wing_l)
-    print("\tref rc int: " + format(ref_seq) +
-          "\n\tvar rc int: " + format(var_seq))
+    print("\tref rc int: " + format(ref_seq_rc) +
+          "\n\tvar rc int: " + format(var_seq_rc))
     print("start motif_match_int reverse complement")
     minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
     # Add local environment data
