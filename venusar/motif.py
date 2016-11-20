@@ -1204,31 +1204,111 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
     #print(("before return set " + format(motif_set.element_positions_list(True))))
     return motif_set
 
-def get_baseline_probs(baseline_f):
+
+def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     """
-    Read in baseline probabilities from a file name.
+    Read in motif file, modify defined thresholds in place and output updated file
+    Based on thresholds.py::output_motifs.
+    Warning: Function assumes that motif file format is valid.
 
     Args:
-        baseline_f a file containing a probability array of the form:
+        input_f (str): Name of file containing frequency matrices for each motif.
+        output_f (str): Name of output file.
+        default_th (float): Default threshold value used if the calculated
+            threshold is lower than this value.
+            This value may be None.
+            Ex: for default_th = 0.0, if biopython calculates threshold needed for
+            a given false positive rate as -1.23, threshold printed will be 0.0.
+        overwrite (bool): True if thresholds already in the file should be replaced.
+        thresholds_list (list): List of thresholds (floats);
+            for thresholds.py calls, thresholds list is calculated by biopython.
+            thresholds_list must be the same length as the number of motifs read in
+
+    See Also: thresholds.py
+    Test Code:
+        motif.get_put_motifs('../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.txt',
+            '../../data/test.txt', 0, False, [.234657]*681 )    # for 681 >= number of motifs
+
+    """
+
+    output_fh = open(output_f, "w")
+    idx = 0
+
+    with open(input_f) as f:
+
+        # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
+        # arrays for C, G, T - each with same format as A
+        iden = "No id found"
+        name = "No name found"
+        # Index for line in the motif matrix.
+        i = -1
+
+        for line in f:
+
+            i += 1
+            # First line contains id and name
+            if i == 0:
+                line = line.strip().split()
+                #iden = line[0]
+                #name = line[1]
+                # Read in listed threshold
+                if (len(line) > 2):
+                    given_thresh = float(line[2])
+                else:
+                    given_thresh = None
+                    line.append("0")
+                # determine what threshold to put
+                if not overwrite and given_thresh is not None:
+                    line[2] = str(given_thresh)
+                elif default_th is not None and default_th > thresholds_list[idx]:
+                    line[2] = str(default_th)
+                else:
+                    line[2] = str(thresholds_list[idx])
+                # print the updated line
+                print("\t".join(line), file=output_fh)
+            # next 4 lines are position weight matrices in order A,C,G,T.
+            elif i < 5:
+                print(line.strip(), file=output_fh)
+
+            # Output motif and continue (there are 2 newlines between motifs)
+            else:
+                print(line.strip(), file=output_fh)
+                idx += 1    # increment threshold list index
+                i = -1      # reset motif matrix line index
+
+    output_fh.close()
+    return
+
+
+def get_baseline_probs(baseline_f):
+    """
+    Read in baseline probabilities from a file that has them listed
+    in the first line non commented line. # lines are ignored as comments
+
+    Args:
+        baseline_f (str): a file containing a probability array of the form:
             [ PrA PrC PrG PrT ]
-        Where PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)
+           Where PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)
+
         note1: the file can contain header lines marked by #
         note2: file format can technically be separated by arbitrary strings of
             any whitespace characters (space, tab, newline, return, formfeed).
             Only space tested during code development.
         note3: Separator must be whitespace, commas converted to empty string.
-        note4: subsequent lines ignored once a properly formatted line is found
+        note4: Subsequent lines ignored once a properly formatted line is found
 
     Returns:
-        Array with probabilities as a float array of the form:
-        [ PrA, PrC, PrG, PrT ]
+        bp_array (list): List of the probabilities for each base: [ PrA, PrC, PrT, PrG ]
+
     """
 
     # Default baseline probability numbers (assumes all are equally likely)
     bp_array = [0.25, 0.25, 0.25, 0.25]
 
     # QQQ|YYY: note safer if check for invalid files everywhere
-    # YYY: Yeah, a function to just validate the input file formats is likely a good idea.
+    if baseline_f is None:
+        return bp_array
+
     with open(baseline_f) as f:
         try:
             for line in f:
@@ -1250,7 +1330,7 @@ def get_baseline_probs(baseline_f):
                   "\tContinuing with default probabilities: " + format(bp_array)))
             return bp_array
 
-        print(("**ERROR** Empty file found.\n" +
+        print(("**ERROR** Empty baseline probability file found.\n" +
               "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
               "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
               "\tContinuing with default probabilities: " + format(bp_array)))
