@@ -12,6 +12,7 @@ import sequence    # need sub_from_*, crop_from_*
 from math import log2
 import numpy as np
 
+
 class MotifArray:
     """this class is the array of motif Elements"""
 
@@ -182,8 +183,8 @@ class MotifArray:
 
         # scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, True)
-        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, True)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
 
         matches = []    # list of MotifMatch objects
 
@@ -396,7 +397,6 @@ class MotifArray:
             match_seq = ""
 
             # check match to all positions where motif overlaps with variant
-            # XXX: convolution has to be faster; then just pull peaks
             for pos in range(motif_element.positions):
                 # check match starting at position
                 # (score_motif will stop after the length of the motif)
@@ -478,9 +478,9 @@ class MotifArray:
             # sequence that matched motif best
             match_seq = ""
 
-            # XXX: if switch to numpy version move this calculation to calculate_probabilities
-            #    or when insert the element that way don't have to du for each score (repeated)
-            # XXX: WARNING: RUNNING THIS COMMAND CORRUPTS MOTIF ELEMENT VARIABLE SPACE!
+            # YYY: if switch to numpy version move this calculation to calculate_probabilities
+            #    or when insert the element that way don't have to do for each score (repeated)
+            # WARNING: RUNNING THIS COMMAND CORRUPTS MOTIF ELEMENT VARIABLE SPACE!
             #    ie the int and original uses of motif_element WILL NOT function properly
             #    makes the motif matrix np array and inserts a row of 0 elements
             #    0 elements used for not ACGT lookup, see sequence.convert2int
@@ -489,7 +489,7 @@ class MotifArray:
                 (np.repeat(0, motif_element.matrix.shape[1]), motif_element.matrix))
 
             # check match to all positions where motif overlaps with variant
-            # XXX: convolution has to be faster; then just pull peaks
+            # QQQ: convolution faster? would have to generate 4 seq copies; then just pull peaks
             for pos in range(motif_element.positions):
                 # check match starting at position
                 # (score_motif will stop after the length of the motif)
@@ -521,6 +521,8 @@ class MotifArray:
             co-binding transcription factors (not currently implemented).
         Homotypic match found by scoring wings only no overlap with variant
 
+        Note: Legacy version; int versions of code run faster
+
         Args:
             baseline_p = array of baseline probabilities of each base,
                 in order (A, C, G, T). Probabilities should sum to 1.
@@ -534,12 +536,6 @@ class MotifArray:
             wing_l = integer wing length to override individual motif length
 
         Returns: Updates matches the list of MotifMatch objects
-
-        XXX: WARNING: ERROR: this function was confusing class and other
-            elements of the match
-        XXX: this function never properly updated class elements;
-            it is not clear what its intended functionality is/was
-            review call usage & code generated based on assumptions/logic leaps.
 
         see also: process_local_env_int
         """
@@ -560,7 +556,6 @@ class MotifArray:
 
         # Get list of motifs that matched
         for matches_index in range(len(matches)):
-            # matches[matches_index]    # XXX
             match_index = matches[matches_index].motif_array_index
             if match_index < 0 or match_index > self.length():
                 print(("**Error** process_local_env unable to find motif " +
@@ -573,10 +568,9 @@ class MotifArray:
             match_motif = self.motifs[match_index]
 
             # Find homotypic variant and reference matches
-            vh_matches = []
-            rh_matches = []
+            h_matches = []
 
-            # YYY!: original code and comments confusing:
+            # YYY!: original code and comments were confusing:
             #    if homotopic matches are not supposed to overlap then...
             #    why does code in motifs.py do wing size 1 less than max positions?
             #    why did the original code below compute variant and reference
@@ -605,20 +599,17 @@ class MotifArray:
             #     In summary, the original code was iffy, at best.
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
 
-            # -- no overlap version
+            # -- no overlap version so variant and ref homotypic matches are equal
             left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
                 #match_motif.positions)
             right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
                 #match_motif.positions)
-            vh_matches = match_motif.ht_matches_in(baseline_p, left_wing)
-            vh_matches += match_motif.ht_matches_in(baseline_p, right_wing)
-            # same strings so variant and ref homotypic matches are equal
-            rh_matches = vh_matches
+            h_matches = match_motif.ht_matches_in(baseline_p, left_wing)
+            h_matches += match_motif.ht_matches_in(baseline_p, right_wing)
 
-            # Update the match information
-            matches[matches_index].var_ht = vh_matches
+            # Update the MotifMatch object match information in the passed matches array
             matches[matches_index].var_gc = var_gc
-            matches[matches_index].ref_ht = rh_matches
+            matches[matches_index].ref_ht = h_matches
             matches[matches_index].ref_gc = ref_gc
 
         # Finding co-binders currently not implemented
@@ -636,7 +627,7 @@ class MotifArray:
             baseline_p = array of baseline probabilities of each base,
                 in order (A, C, G, T). Probabilities should sum to 1.
                 see get_baseline_probs()
-            matches = list of MotifMatch objects, generated by motif_match()
+            matches = list of MotifMatch objects, generated by motif_match_int()
             seq_element = SequenceElement object v_seq and r_seq belong to
             co_binders = dictionary that lists co-binding transcription factors for
                 a given transcription factor name [feature not enabled. Use None]
@@ -645,12 +636,6 @@ class MotifArray:
             wing_l = integer wing length to override individual motif length
 
         Returns: Updates matches the list of MotifMatch objects
-
-        XXX: WARNING: ERROR: this function was confusing class and other
-            elements of the match
-        XXX: this function never properly updated class elements;
-            it is not clear what its intended functionality is/was
-            review call usage & code generated based on assumptions/logic leaps.
 
         see also: process_local_env
         """
@@ -665,7 +650,6 @@ class MotifArray:
 
         # Get list of motifs that matched
         for matches_index in range(len(matches)):
-            # matches[matches_index]    # XXX
             match_index = matches[matches_index].motif_array_index
             if match_index < 0 or match_index > self.length():
                 print(("**Error** process_local_env unable to find motif " +
@@ -678,52 +662,33 @@ class MotifArray:
             match_motif = self.motifs[match_index]
 
             # Find homotypic variant and reference matches
-            vh_matches = []
-            rh_matches = []
+            h_matches = []
 
-            # YYY!: original code and comments confusing:
-            #    if homotopic matches are not supposed to overlap then...
-            #    why does code in motifs.py do wing size 1 less than max positions?
-            #    why did the original code below compute variant and reference
-            #        matches against wings when if they don't overlap then same?
-            #
-            # ZZZ: which of the following should be used!?! (answer no overlap version)
+            # YYY!: homotopic matches are not supposed to overlap the core sequence
             #   Check each wing separately,
             #   homotypic matches should not overlap the variant
             #   because variant and reference wings match only compute once
-            #   wing size = size of the motif matched?
-            # CCC-JA: Yeah, this part of the code was/is a mess. He was rushing towards the end
-            #     to try to take into account homotypic matches and local GC content. I
-            #     couldn't really decipher what was going on and he had a lot of unused variables
-            #     and such left in here. It also didn't actually work quite right if I remember
-            #     correctly. Our default wing size was +/- 50 bp from the variant position to
+
+            # YYY: wing size = size of the motif matched? NO
+            #     default wing size was +/- 50 bp from the variant position to
             #     look for homotypic matches, and yes, they should NOT overlap the variant.
             #     I suppose they might, however, overlap each other, but that'll get confusing
             #     in the output pretty quickly. If they overlap, best to just take the strongest
             #     match out of the overlaps and report that, I think.
             #
-            #     GC content is pretty straightforward, just looking at % of bases in wings that are
-            #     G or C in variant and reference sequences. Genuine TF binding sites tend to have
-            #     slightly higher than normal GC content (usually ~40% in non-coding regions).
-            #     If it was say, 55-60% in the local area of the variant, it might lend a bit of
-            #     credence towards it being a genuine binding site. Just another piece of info.
-            #     In summary, the original code was iffy, at best.
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
 
-            # -- no overlap version
+            # -- no overlap version so variant and ref homotypic matches are equal
             left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq_int, wing_l)
                 #match_motif.positions)
             right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq_int, wing_l)
                 #match_motif.positions)
-            vh_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
-            vh_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
-            # same strings so variant and ref homotypic matches are equal
-            rh_matches = vh_matches
+            h_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
+            h_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
 
-            # Update the match information
-            matches[matches_index].var_ht = vh_matches
+            # Update the MotifMatch object match information in the passed matches array
             matches[matches_index].var_gc = var_gc
-            matches[matches_index].ref_ht = rh_matches
+            matches[matches_index].ref_ht = h_matches
             matches[matches_index].ref_gc = ref_gc
 
         # Finding co-binders currently not implemented
@@ -773,7 +738,9 @@ class MotifElement:
 
     def calculate_probabilities(self):
         """
-        Given a count motif matrix, return motif probabilities
+        Converts self.matrix from count to probabilities
+
+        Given a count motif matrix, return motif probabilities and updata matrix_type
             matrix columns are positions
             matrix rows are for bases, order ACGT    XXX|QQQ make sure notes match
 
@@ -786,6 +753,11 @@ class MotifElement:
 
         Pseudocounts are added in to avoid having a zero value in matrices with
         small sample sizes; see MotifElement.pseudocount
+
+        Returns:
+            self.matrix    as probabilities
+            self.matrix_type = 1
+
         """
 
         # only process count matrices that are valid
@@ -798,11 +770,6 @@ class MotifElement:
         g = self.matrix[2]
         t = self.matrix[3]
 
-        # QQQ: change to use numpy methods --> faster?
-        # CCC-JA: Might be. Python's timeit function might be of use for testing
-        #     small performance cases like this.
-        # CCC-WK: the numpy reference is an extension of what I plan to do with convert2int
-        #	the use not the conversion would get faster.
         # initialize output matrix of same size as input matrix
         new_m = [[0 for y in range(self.positions)] for x in range(4)]
 
@@ -1074,9 +1041,9 @@ class MotifMatch:
         # variant and reference gc content
         self.var_gc = None
         self.ref_gc = None
-        # variant and reference homotypic matches
-        self.var_ht = []
-        self.ref_ht = []    # XXX: drop see process_local_env notes
+        # reference homotypic matches
+        self.ref_ht = []
+
         # co-binding motifs (currently not implemented)
         self.cobinders = []
 
@@ -1305,7 +1272,7 @@ def get_baseline_probs(baseline_f):
     # Default baseline probability numbers (assumes all are equally likely)
     bp_array = [0.25, 0.25, 0.25, 0.25]
 
-    # QQQ|YYY: note safer if check for invalid files everywhere
+    # YYY: note safer if check for invalid files everywhere
     if baseline_f is None:
         return bp_array
 
