@@ -1247,6 +1247,73 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     return
 
 
+def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
+    """
+    Read in motif file, filter based on gene expression above defined thresholds
+    and output updated file. Only motifs that have gene expression above the
+    threshold will occur in the output file.
+    Based on get_put_motifs and tf_expression.py::filter_motifs
+    Warning: Function assumes that motif file format is valid.
+
+    Args:
+        input_f (str): Name of file containing frequency matrices for each motif.
+        output_f (str): Name of output file.
+        threshold (float): Expression threshold that TFs must meet to be included in output.
+            this threshold is for gene expression; default in tf_expression is 5
+        gene_dict (dict): Dictionary containing gene names and expression values.
+            see tf_expression.py::get_genes
+
+    See Also: thresholds.py, get_put_motifs(), tf_expression.py::filter_motifs
+    Test Code:
+        motif.get_filterbygene_put_motifs('../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.txt',
+            '../../data/test.txt', 0, False, gene_dict )    # for 681 >= number of motifs
+
+    """
+
+    output_fh = open(output_f, "w")
+    idx = 0
+
+    with open(input_f) as f:
+
+        # JASPAR motif file has >id name \n A [ tab delineated weight array ] \n
+        # arrays for C, G, T - each with same format as A
+        output_line = False    # only true if gene expressed and above threshold
+        # Index for line in the motif matrix.
+        i = -1
+
+        for line in f:
+
+            i += 1
+            # First line contains id, name and threshold; only check name
+            if i == 0:
+                name = line.split()[1]
+                output_line = False    # reset to false (default)
+                # handle gene matching
+                try:
+                    exp_vals = gene_dict[name]    # this is the line that must be in try
+                    # Check if any of the expression values meet the threshold.
+                    for x in exp_vals:
+                        if float(x) >= threshold:
+                            output_line = True    # found and above threshold
+                            break    # breaks out of x in exp_vals
+
+                except:
+                    # TODO - Add option to retain motifs that don't match a gene in the expression file.
+                    output_line = False
+
+            # next 4 lines are position weight matrices in order A,C,G,T.
+            elif i >= 5:
+                idx += 1    # increment threshold list index
+                i = -1      # reset motif matrix line index
+
+            # Output motif and continue (there are 2 newlines between motifs)
+            if output_line:
+                print(line.strip(), file=output_fh)
+
+    output_fh.close()
+    return
+
+
 def get_baseline_probs(baseline_f):
     """
     Read in baseline probabilities from a file that has them listed
