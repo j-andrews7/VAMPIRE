@@ -20,7 +20,7 @@ Args:
 import sys
 import argparse
 import time
-
+import motif
 
 def parse_header(line):
     """
@@ -221,7 +221,7 @@ def get_genes(exp_file, samples, threshold, max_only):
     return gene_dict
 
 
-def main(inp_file, exp_file, out_file, th=5, motif_file, motifout_file, use_vcf):
+def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", use_vcf=True):
     """
         If use_vcf true then:
             For a given motif annotated vcf file (already run through motifs.py),
@@ -310,8 +310,8 @@ if __name__ == '__main__':
 
     parser.add_argument("-i", "--input", dest="input_file", required=True)
     parser.add_argument("-e", "--expression", dest="exp_file", required=True)
-    parser.add_argument("-m", "--expression", dest="motif_file", required=False)
-    parser.add_argument("-mo", "--expression", dest="motif_out_file", required=False)
+    parser.add_argument("-m", "--motif_input", dest="motif_file", required=False)
+    parser.add_argument("-mo", "--motif_output", dest="motif_out_file", required=False)
     parser.add_argument("-o", "--output", dest="output_file", required=True)
     parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=5, type=float)
 
