@@ -90,6 +90,8 @@ class SequenceArray:
         create a new SequenceElement for joined variant set for each case:
             same chromosome + same sample + within limit_mv_dist --> join seq
         characters between variants drawn from reference genome fasta index
+        only search right from current position
+        WARNING: assumes that sorted first, ie call sort!
 
         for the set of sequence elements use position, samples, wing size,
         and user defined overlap extent (limit_mv_dist) integer to join
@@ -108,6 +110,28 @@ class SequenceArray:
         #    # grab name, position, snip from var_seq1
         # new_element.seq_var = multivar_str
         # SequenceArray.add_seq(new_element)
+
+        # --- pseudo-code
+        # loop on each seq array element
+        #    loop next in sequence
+        #         set insertN = -1
+        #         if chromosome + position + samples --> check distance
+        #         if within distance --> build new element and add
+        #            when add use list.insert(insertN, element) to seq
+        #            inserts after insertN
+        #            where insertN = last index in seq with same chromosome and position
+        #            if insertN is unknown must search to find
+        #            increment insertN by one when done
+        #
+
+        return
+
+    def sort(self):
+        """
+        sort the seq array prior to multi-variant call by chromosome and position
+
+        """
+        # XXX incomplete define me!
         return
 
 
