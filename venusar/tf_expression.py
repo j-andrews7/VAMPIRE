@@ -180,8 +180,6 @@ def get_genes(exp_file, samples, threshold, max_only):
     data_cols = []
     gene_dict = {}
 
-    print('found samples:' + format(samples))
-
     print('start read exp_file:' + format(exp_file))
 
     if max_only:
@@ -192,11 +190,6 @@ def get_genes(exp_file, samples, threshold, max_only):
                 if samp in samples:
                     data_idx = header.index(samp)
                     data_cols.append(data_idx)
-                    print('match:' + format(samp) + "::" + format(data_idx))
-                else:
-                    print(' drop:' + format(samp) + "::" + format(header.index(samp)))
-
-            print('columns' + format(data_cols))
 
             # Read in expression levels for each gene.
             for line in f:
@@ -208,7 +201,7 @@ def get_genes(exp_file, samples, threshold, max_only):
                         exp_val = float(line[idx])
 
                 gene_dict[gene_name] = exp_val
-                print(gene_name + "\t" + format(exp_val))
+
     else:
         # read and return exp value list in gene_dict
         with open(exp_file) as f:
