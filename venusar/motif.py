@@ -1261,6 +1261,7 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
         threshold (float): Expression threshold that TFs must meet to be included in output.
             this threshold is for gene expression; default in tf_expression is 5
         gene_dict (dict): Dictionary containing gene names and expression values.
+            expression values can be float or list of strings/floats
             see tf_expression.py::get_genes
 
     See Also: thresholds.py, get_put_motifs(), tf_expression.py::filter_motifs
@@ -1292,10 +1293,15 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
                 try:
                     exp_vals = gene_dict[name]    # this is the line that must be in try
                     # Check if any of the expression values meet the threshold.
-                    for x in exp_vals:
-                        if float(x) >= threshold:
+                    if type(exp_vals) == float:
+                        if exp_vals >= threshold:
                             output_line = True    # found and above threshold
-                            break    # breaks out of x in exp_vals
+                    else:
+                        # assumes list type; if not list triggers exception then no print
+                        for x in exp_vals:
+                            if float(x) >= threshold:
+                                output_line = True    # found and above threshold
+                                break    # breaks out of x in exp_vals
 
                 except:
                     # TODO - Add option to retain motifs that don't match a gene in the expression file.
