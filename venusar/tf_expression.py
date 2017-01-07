@@ -163,6 +163,9 @@ def process_line(line, gene_dict, thresh):
 def get_genes(exp_file, samples, threshold, max_only):
     """
     Reads in and parses the .bed expression file.
+    File format expected to be:
+        Whose format is tab seperated columns with header line:
+        CHR  START  STOP  GENE  <sample 1>  <sample 2>  ...  <sample n>
 
     Args:
         exp_file (str): Name of expression file.
