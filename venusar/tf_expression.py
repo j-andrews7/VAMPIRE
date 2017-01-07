@@ -180,6 +180,10 @@ def get_genes(exp_file, samples, threshold, max_only):
     data_cols = []
     gene_dict = {}
 
+    print('found samples:' + format(samples))
+
+    print('start read exp_file:' + format(exp_file))
+
     if max_only:
         # read and only return max exp value in gene_dict
         with open(exp_file) as f:
@@ -188,6 +192,11 @@ def get_genes(exp_file, samples, threshold, max_only):
                 if samp in samples:
                     data_idx = header.index(samp)
                     data_cols.append(data_idx)
+                    print('match:' + format(samp) + "::" + format(data_idx))
+                else:
+                    print(' drop:' + format(samp) + "::" + format(header.index(samp)))
+
+            print('columns' + format(data_cols))
 
             # Read in expression levels for each gene.
             for line in f:
@@ -195,10 +204,11 @@ def get_genes(exp_file, samples, threshold, max_only):
                 gene_name = line[3].upper()
                 exp_val = -1e1000
                 for idx in data_cols:
-                    if line[idx] > exp_val:
-                        exp_val = line[idx]
+                    if float(line[idx]) > exp_val:
+                        exp_val = float(line[idx])
 
                 gene_dict[gene_name] = exp_val
+                print(gene_name + "\t" + format(exp_val))
     else:
         # read and return exp value list in gene_dict
         with open(exp_file) as f:
@@ -265,7 +275,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
                 sys.exit()
 
             print("Filtering motif info for TFs that don't meet the expression threshold of " +
-                str(th) + ".")
+                str(th) + ". Found " + format(len(gene_dict)) + " genes. Start processing vcf file.")
             for line in vcf:
                 new_line = process_line(line, gene_dict, th)
                 if new_line is not None:
@@ -298,7 +308,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
             sys.exit()
 
         print("Filtering motif info for TFs that don't meet the expression threshold of " +
-            str(th) + ".")
+            str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
 
         motif.get_filterbygene_put_motifs(motif_file, motifout_file, th, gene_dict)
 
