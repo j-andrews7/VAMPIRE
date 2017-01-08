@@ -8,6 +8,7 @@ intended to be imported with motifs.py and other for related functionality
 XXX|YYY: note incomplete
 """
 import re    # regular expression matching
+from operator import itemgetter    # needed for multi-element list indexing
 
 class SequenceArray:
     """
@@ -132,6 +133,41 @@ class SequenceArray:
 
         """
         # XXX incomplete define me!
+        if len(self.multivariant) > 0:
+            # too late do nothing
+            return
+
+        #for seqElement in self.seq:
+
+        # define data structures used to sort
+        name_to_index = {}    # dictionary: name = index list
+        position_to_index = {}    # dictionary: name = position list
+        index_sort = []
+
+        index = 0
+        while index < len(self.seq):
+            # get the current element information
+            # these need to be lists of indices
+            if self.seq[index].name in name_to_index:
+                name_to_index[self.seq[index].name].append(index)
+                position_to_index[self.seq[index].name].append(self.seq[index].position)
+            else:
+                # new key value pair --> make a new list
+                name_to_index[self.seq[index].name] = [index]
+                position_to_index[self.seq[index].name] = [self.seq[index].position]
+
+            # increment to next element
+            index = index + 1
+
+        for name_key in sorted(name_to_index):
+            position_set = position_to_index[name_key]
+            index_set = name_to_index[name_key]
+            # get indexes of the sorted position set
+            pos_order = sorted(list(range(len(position_set))), key=lambda k: position_set[k])
+            index_sort.append(itemgetter(*pos_order)(index_set))
+
+        # XXX: now need to reorder the seq array to match index_sort
+
         return
 
 
