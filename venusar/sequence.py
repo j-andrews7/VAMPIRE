@@ -53,6 +53,34 @@ class SequenceArray:
         self.multivariant.append(len(self.seq) - 1)
         return
 
+    def add_seq_multivariant_after_elementN(self, sequence_element_to_add, insertAtN):
+        """
+        add passed multivariant sequence element to the set at index insertAtN in seq
+
+        Args:
+            sequence_element_to_add    defined sequenceElement()
+            insertAtN    integer specifying where in self.seq to insert
+
+        Returns:
+            Nothing; just updates object attributes
+        """
+        # add the new element in the middle of the sequence
+        self.insert(insertAtN, sequence_element_to_add)
+
+        # increment all existing references to the original sequence in multivariant
+        max_smaller_index = -1
+        for mv_indx in range(len(self.multivariant) - 1, -1, -1):
+            if self.multivariant[mv_indx] >= insertAtN:
+                self.multivariant[mv_indx] = self.multivariant[mv_indx] + 1
+            else:
+                if max_smaller_index < self.multivariant[mv_indx]:
+                    max_smaller_index = mv_indx
+
+        # add the new multivariant index in order
+        self.multivariant.insert(max_smaller_index + 1, insertAtN)
+
+        return
+
     def clear(self):
         self.__init__()
         return
@@ -119,11 +147,13 @@ class SequenceArray:
         #         if chromosome + position + samples --> check distance
         #         if within distance --> build new element and add
         #            when add use list.insert(insertN, element) to seq
-        #            inserts after insertN
-        #            where insertN = last index in seq with same chromosome and position
+        #            inserts at insertN
+        #            where insertN = 1+last index in seq with same chromosome and position
         #            if insertN is unknown must search to find
         #            increment insertN by one when done
         #
+        # NOTE: for multivariant use add_seq_multivariant_after_elementN()
+        #    not insertN to handle all elements of the insertion
 
         return
 
@@ -131,19 +161,21 @@ class SequenceArray:
         """
         sort the seq array prior to multi-variant call by chromosome and position
 
+        sort does NOT handle multivariant items!
+
         """
-        # XXX incomplete define me!
         if len(self.multivariant) > 0:
             # too late do nothing
             return
 
         #for seqElement in self.seq:
 
-        # define data structures used to sort
+        # -- define data structures used to sort
         name_to_index = {}    # dictionary: name = index list
         position_to_index = {}    # dictionary: name = position list
         index_sort = []
 
+        # -- get current order information
         index = 0
         while index < len(self.seq):
             # get the current element information
@@ -159,14 +191,21 @@ class SequenceArray:
             # increment to next element
             index = index + 1
 
+        # -- sort by name then position creating new index order as index_set
         for name_key in sorted(name_to_index):
             position_set = position_to_index[name_key]
             index_set = name_to_index[name_key]
             # get indexes of the sorted position set
             pos_order = sorted(list(range(len(position_set))), key=lambda k: position_set[k])
-            index_sort.append(itemgetter(*pos_order)(index_set))
+            if len(index_set) > 1:
+                # extend iterates over set of objects to add separetly to the list
+                index_sort.extend(itemgetter(*pos_order)(index_set))
+            else:
+                # adds an object to the current list
+                index_sort.append(itemgetter(*pos_order)(index_set))
 
-        # XXX: now need to reorder the seq array to match index_sort
+        # -- reorder the seq array to match index_sort
+        self.seq = itemgetter(*index_sort)(self.seq)
 
         return
 

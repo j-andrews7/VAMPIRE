@@ -168,3 +168,27 @@ y.seq_int
 y.convert2int(y.seq)
 [1, 2, 3, 4]
 
+# -- test SequenceArray capability
+yAr = sequence.SequenceArray()
+# chromosome, position, reference_seq, variant_seq):
+yAr.add_seq_defined('xyz', 32, 'A', 'T')
+yAr.add_seq_defined('xyz', 1, 'C', 'G')
+yAr.add_seq_defined('xyz', 12, 'C', 'G')
+yAr.add_seq_defined('abc', 1000, 'C', 'G')
+yAr.add_seq_defined('abc', 100, 'C', 'G')
+yAr.add_seq_defined('mn3', 83, 'C', 'G')
+yAr.add_seq_defined('abc', 13, 'C', 'G')
+
+print('##  -- pre sort -- ##')
+ind = 0
+while ind < len(yAr.seq):
+    print(((yAr.seq[ind]).name + ":" + format((yAr.seq[ind]).position)))
+    ind = ind + 1
+
+yAr.sort()
+
+print('##  -- post sort -- ##')
+ind = 0
+while ind < len(yAr.seq):
+    print(((yAr.seq[ind]).name + ":" + format((yAr.seq[ind]).position)))
+    ind = ind + 1
