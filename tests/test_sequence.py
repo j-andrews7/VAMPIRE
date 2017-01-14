@@ -192,3 +192,53 @@ ind = 0
 while ind < len(yAr.seq):
     print(((yAr.seq[ind]).name + ":" + format((yAr.seq[ind]).position)))
     ind = ind + 1
+
+
+# -- working on multivariant_list_build
+x = [0, 5, 3, 4]
+y = [1, 3, 5, 6, 8]
+overlap = list(set(x).intersection(y))    # returns set; must convert to list
+list(set(x).difference(y))                # items in x not in y
+
+
+file_reference_genome = "../../data/genome_reference/reference_genome_hg19.fa"
+from pyfaidx import Fasta
+fa_ind = Fasta(file_reference_genome)
+# name    position        ref        var
+# chr1	14653	.	C	T	48.56	PASS
+# chr1	14907	.	A	G	28.47	PASS
+# chr1	14930	.	A	G	28.47	PASS
+#
+start_pos = 14907
+next_pos = 14930
+chr_name = "chr1"
+variant_str = "G"
+variant_str2 = "G"
+sequence.get_surrounding_seq(chr_name, start_pos, next_pos - start_pos + 1, 0, fa_ind)
+# returns: C
+
+ref_seq = sequence.get_surrounding_seq(chr_name, start_pos,
+    next_pos - start_pos + len(variant_str2), 0, fa_ind)
+#    2. get inbetween ref_seq (excludes variant positions)
+between_seq = sequence.get_surrounding_seq(chr_name, start_pos + len(variant_str),
+    next_pos - (start_pos + len(variant_str)), 0, fa_ind)
+#    3. build the combined variant sequence
+var_seq = variant_str + between_seq + variant_str2
+
+ref_seq = get_surrounding_seq(chr_name, start_pos, 1, limit_mv_dist + wing_l, fasta_object)
+
+
+
+x = 'AGAAAAAGGCAGGACAGAATTACAN'
+import re
+search_pattern_notaz = re.compile('[^a-zA-Z]')    # faster to precompile
+re.search('[a-zA-Z]', x)    # match alpha
+    # <_sre.SRE_Match object; span=(0, 1), match='A'>
+re.search('[^a-zA-Z]', x)   # match not alpha
+re.search('[0-9]', x)       # match number
+re.search('[^0-9]', x)      # match not number
+    # <_sre.SRE_Match object; span=(0, 1), match='A'>
+re.search('[^a-zA-Z]', x + ",")    # match no alpha
+    # <_sre.SRE_Match object; span=(25, 26), match=','>
+y = re.search(search_pattern_notaz, x + ",")
+y is not None

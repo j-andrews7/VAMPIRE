@@ -10,6 +10,7 @@ XXX|YYY: note incomplete
 import re    # regular expression matching
 from operator import itemgetter    # needed for multi-element list indexing
 
+
 class SequenceArray:
     """
     this class is the array of sequence Elements
@@ -114,26 +115,38 @@ class SequenceArray:
         """return length of the array"""
         return (len(self.seq))
 
-    def multivariant_list_build(self, limit_mv_dist):
+    def multivariant_list_build(self, limit_mv_dist, wing_l, fasta_object):
         """
-        create a new SequenceElement for joined variant set for each case:
-            same chromosome + same sample + within limit_mv_dist --> join seq
-        characters between variants drawn from reference genome fasta index
-        only search right from current position
-        WARNING: assumes that sorted first, ie call sort!
-
-        for the set of sequence elements use position, samples, wing size,
+        For the set of sequence elements use position, samples, wing size,
         and user defined overlap extent (limit_mv_dist) integer to join
-        multiple chromosome variants for sample that fall within wings
+        multiple chromosome variants for sample that fall within wings.
 
-        Search is from low to high position
+        Create a new SequenceElement for joined variant set for each case:
+            same chromosome + same sample + within limit_mv_dist --> join seq
+        Characters between variants drawn from reference genome fasta index
+        The original source SequenceElements are NOT removed
+        New multi-variant SequenceElements are inserted adjacent to original items
 
-        returns
-            updates the seq array to include multi-variant objects
-            add
+        Only search right in self.seq from current array index to join SequenceElements()
+        WARNING: assumes that sorted first, ie call sort before
+            creating multivariant items!
+
+        WARNING: Does not handle multialleles, ie comma-separated or / separated variants
+            skips joining if either variant to be joined as non ACGT variant characters
+
+        Args:
+            limit_mv_dist = integer distance from starting SequenceElement
+                position to search for a match within the chromosome name
+                and sample set overlap
+            wing_l = Integer number of bases on each side of variant to return (wing
+                length) as full sequence.
+            fasta_object = indexed fasta file object
+
+        Returns
+            updates self.seq array to include multi-variant objects
 
         """
-        print("XXX: function NOT implemented yet. Please check in later.")
+        print("XXX: function NOT tested yet. Outcome uncertain.")
         # multivar_str = var_seq1 + reference_space + var_seq2
         # new_element = SequenceElement()
         #    # grab name, position, snip from var_seq1
@@ -152,23 +165,184 @@ class SequenceArray:
         #            if insertN is unknown must search to find
         #            increment insertN by one when done
         #
+        #            no warning: can't insert because will break reference indexes
+        #            build element and insert index for elements to be added
+        #
         # NOTE: for multivariant use add_seq_multivariant_after_elementN()
         #    not insertN to handle all elements of the insertion
+        #
+
+        # could implement position search using numpy arrays
+        #    import numpy
+        #    x = numpy.array([2,3,1,0])
+        #    numpy.where( x > 2 )
+        # but don't need to search all just those positions associated with names'
+
+        # -- define data structures used to lookup matches
+        name_to_index = {}    # dictionary: name = index list
+        position_to_index = {}    # dictionary: name = position list
+
+        # -- get current order information
+        index = 0
+        while index < len(self.seq):
+            # get the current element information
+            # these need to be lists of indices
+            if self.seq[index].name in name_to_index:
+                name_to_index[self.seq[index].name].append(index)
+                position_to_index[self.seq[index].name].append(self.seq[index].position)
+            else:
+                # new key value pair --> make a new list
+                name_to_index[self.seq[index].name] = [index]
+                position_to_index[self.seq[index].name] = [self.seq[index].position]
+            # increment to next element
+            index = index + 1
+
+        # -- define data structures used to track elements to add
+        search_pattern_notaz = re.compile('[^a-zA-Z]')    # faster to precompile
+        sort_index_order = []
+
+        index = 0
+        while index < len(self.seq):
+            sort_index_order.append(index)    # add the current index
+            start_pos = self.seq[index].position
+            chr_name = self.seq[index].name
+            variant_str = self.seq[index].seq_var.seq
+            position_set = position_to_index[chr_name]
+            index_set = name_to_index[chr_name]
+
+            if len(variant_str) == 0:
+                next    # nothing to join so next
+            if re.search(search_pattern_notaz, variant_str) is not None:
+                next    # found multi-allele variant (join complexity not handled)
+
+            current_search_index_into = -1
+            for search_index in index_set:
+                current_search_index_into = current_search_index_into + 1
+                next_pos = position_set[current_search_index_into]
+                if search_index == index:
+                    next    # don't reprocess
+                if search_index < index:
+                    next    # don't reprocess; part of sorted assumption
+                if next_pos <= start_pos:
+                    next    # same position don't try to join, less position ignore
+                # at this point know have same chromosome and larger position
+                # need to check within search distance limit_mv_dist
+                if (start_pos + limit_mv_dist) < next_pos:
+                    break    # break because hit first position outside search range
+                # break above is part of the search assumption, set to next to remove
+                # now same chromosome, larger position within search distance
+                # but need to check for sample match and build set of overlapping samples
+                # self.seq[index] to self.seq[search_index] samples
+                overlap_samples = set(self.seq[index].samples).intersection(self.seq[search_index].samples)
+                if len(overlap_samples) == 0:
+                    next
+                variant_str2 = self.seq[search_index].seq_var.seq
+                if len(variant_str2) == 0:
+                    next    # nothing to join so next
+                if re.search(search_pattern_notaz, variant_str2) is not None:
+                    next    # found multi-allele variant (join complexity not handled)
+
+                # -- define the reference and variant sequence
+                #    1. ref overlapping ref sequence:
+                #       get var1 + ref(length delta position) + var2
+                ref_seq = get_surrounding_seq(chr_name, start_pos,
+                    next_pos - start_pos + len(variant_str2), 0, fasta_object)
+                #    2. get inbetween ref_seq (excludes variant positions)
+                between_seq = get_surrounding_seq(chr_name, start_pos + len(variant_str),
+                    next_pos - (start_pos + len(variant_str)), 0, fasta_object)
+                #    3. build the combined variant sequence
+                var_seq = variant_str + between_seq + variant_str2
+
+                #ref_seq = get_surrounding_seq(chr_name, start_pos, 1,
+                #     limit_mv_dist + wing_l, fasta_object)
+
+                    #seq_var.seq
+                    #seq_ref.seq
+                    # .assign()
+
+                # -- create the new sequence element
+                new_sequence_element = SequenceElement()
+                new_sequence_element.assign(chr_name, start_pos, ref_seq, var_seq)
+                # ZZZ: need to update for wings? no do in motifs
+                # grab samples for variant from the overlapping set
+                new_sequence_element.assign_samples(overlap_samples)
+
+                # -- need to build the vcf_line
+                #[0-4]    CHROM    POS       ID    REF      ALT
+                #[5-?]    QUAL	    FILTER    INFO  FORMAT   <tab separated samples>
+                if len(self.seq[index].vcf_line) > 0:
+                    line = self.seq[index].vcf_line
+                    sample_set = self.seq[index].samples
+                elif len(self.seq[current_search_index_into].vcf_line) > 0:
+                    line = self.seq[current_search_index_into].vcf_line
+                    sample_set = self.seq[search_index].samples
+                else:
+                    line = ""
+
+                if len(line) > 0:
+                    line_list = line.split("\t")
+                    #    change ref [3] to ref_str
+                    line_list[3] = ref_seq
+                    #    change alt [4] to var_str
+                    line_list[4] = var_seq
+                    # [7]    ? assume first works may be wrong: QQQ: how to merge?
+                    # [9]    update the sample set dropping not matching
+                    sample_content = line_list[9].split("\t")
+                    sample_indexes = list(range(0, len(sample_content)))
+                    # get the items in the full sample list not in overlap
+                    #    drop_indexes = list(set(sample_indexes).difference(overlap_samples))
+                    #    would have to loop the version above instead...
+                    # get the samples in the reference line not in the overlap
+                    drop_indexes = list(set(sample_set).difference(overlap_samples))
+                    ref_bad = list(set(sample_indexes).difference(sample_set))
+                    if len(ref_bad) > 0:
+                        replace_string = sample_content[ref_bad[0]]
+                    else:
+                        replace_string = ""
+
+                    for sind in drop_indexes:
+                        sample_content[sind] = replace_string
+
+                    # rejoin the samples
+                    line_list[9] = "\t".join(sample_content)
+
+                    # rebuild the line
+                    line = "\t".join(line_list)
+
+                new_sequence_element.vcf_line = line
+
+                # -- set tracking variables to add to the sequence later so don't break indexes now
+
+                # add the new sequence to the SequenceArray
+                self.add_seq(new_sequence_element)
+                print(("\tmultivariant_list_build add element " + new_sequence_element.name))
+
+                # add the new index to the sortable index order and multivariant
+                sort_index_order.append(self.length() - 1)
+                self.multivariant.append(len(sort_index_order) - 1)
+
+        # now that searched all must sort to match the sort_index_order
+        # -- reorder the seq array to match index_sort
+        self.seq = itemgetter(*sort_index_order)(self.seq)
 
         return
 
     def sort(self):
         """
-        sort the seq array prior to multi-variant call by chromosome and position
+        sort the self.seq array prior to multi-variant call by chromosome and position
 
         sort does NOT handle multivariant items!
+
+        Args:
+            internal function, no arguments, operates on self.seq object
+
+        Returns:
+            update self.seq array with elements sorted by name then position
 
         """
         if len(self.multivariant) > 0:
             # too late do nothing
             return
-
-        #for seqElement in self.seq:
 
         # -- define data structures used to sort
         name_to_index = {}    # dictionary: name = index list
@@ -613,9 +787,8 @@ def crop_from_right(sequence_string, crop_length):
     return sequence_string[:-crop_length]
 
 
-# ZZZ: any reason to not be SequenceElement class method?
-# YYY: Seems a natural place for it to go to me.
-# CCC-WK: leaving outside because does not require sequenceElement parts
+# ZZZ: Can not be a SequenceElement class method because used in
+#        SequenceArray.multivariant_list_build prior to SequenceElement() creation
 def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     """ Return sequence containing variant base + specified number
         of bases on each side from reference sequence file.
@@ -645,8 +818,11 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     print(("pulling reference sequence for (" + chromo + ", " +
         format(var_pos) + ", " + format(ref_l) + ", " + format(wing_l) + ", " +
         format(fas) + ")\n\t" +
-        format(var_pos - wing_l - 1) + ":" + format(var_pos + wing_l + ref_l - 1)
+        format(var_pos - wing_l) + ":" + format(var_pos + wing_l + ref_l)
         ))
+    #  fas is 0 indexed ie var_pos - 1 to get correct value for var_pos
+    #     so var_pos - 0 - 1 returns the value at var_pos in the fasta sequence
+    #     do not print with -1 above to avoid confusing the user
     ref_seq = fas[chromo][var_pos - wing_l - 1: var_pos + wing_l + ref_l - 1]
 
     # debug print("\tSequence: "+str(ref_seq))
