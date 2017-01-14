@@ -515,7 +515,7 @@ class MotifArray:
 
         return scores
 
-    def process_local_env(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l):
+    def process_local_env(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l, run_homotypic):
         """
         Finds GC content, weak homotypic matches, and motif matches for
             co-binding transcription factors (not currently implemented).
@@ -534,6 +534,7 @@ class MotifArray:
             v_seq = variant sequence array of characters (strings 'A','C','G', or 'T')
             r_seq = reference sequence array of characters (strings 'A','C','G', or 'T')
             wing_l = integer wing length to override individual motif length
+            run_homotypic (boolean) = if true runs ht_matches_in()
 
         Returns: Updates matches the list of MotifMatch objects
 
@@ -599,13 +600,14 @@ class MotifArray:
             #     In summary, the original code was iffy, at best.
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
 
-            # -- no overlap version so variant and ref homotypic matches are equal
-            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
-                #match_motif.positions)
-            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
-                #match_motif.positions)
-            h_matches = match_motif.ht_matches_in(baseline_p, left_wing)
-            h_matches += match_motif.ht_matches_in(baseline_p, right_wing)
+            if run_homotypic:
+                # -- no overlap version so variant and ref homotypic matches are equal
+                left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq, wing_l)
+                    #match_motif.positions)
+                right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq, wing_l)
+                    #match_motif.positions)
+                h_matches = match_motif.ht_matches_in(baseline_p, left_wing)
+                h_matches += match_motif.ht_matches_in(baseline_p, right_wing)
 
             # Update the MotifMatch object match information in the passed matches array
             matches[matches_index].var_gc = var_gc
@@ -616,7 +618,7 @@ class MotifArray:
 
         return matches
 
-    def process_local_env_int(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l):
+    def process_local_env_int(self, baseline_p, matches, seq_element, co_binders_dict, v_seq, r_seq, wing_l, run_homotypic):
         """
         Integer sequence based version
         Finds GC content, weak homotypic matches, and motif matches for
@@ -634,6 +636,7 @@ class MotifArray:
             v_seq = variant sequence array of integers (0-5)
             r_seq = reference sequence array of integers (0-5)
             wing_l = integer wing length to override individual motif length
+            run_homotypic (boolean) = if true runs ht_matches_in()
 
         Returns: Updates matches the list of MotifMatch objects
 
@@ -678,13 +681,14 @@ class MotifArray:
             #
             # CCC-WK: code as written makes no attempt to check for wings overlapping; XXX
 
-            # -- no overlap version so variant and ref homotypic matches are equal
-            left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq_int, wing_l)
-                #match_motif.positions)
-            right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq_int, wing_l)
-                #match_motif.positions)
-            h_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
-            h_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
+            if run_homotypic:
+                # -- no overlap version so variant and ref homotypic matches are equal
+                left_wing = sequence.sub_from_end(seq_element.seq_left_wing.seq_int, wing_l)
+                    #match_motif.positions)
+                right_wing = sequence.sub_from_start(seq_element.seq_right_wing.seq_int, wing_l)
+                    #match_motif.positions)
+                h_matches = match_motif.ht_matches_in_int(baseline_p, left_wing)
+                h_matches += match_motif.ht_matches_in_int(baseline_p, right_wing)
 
             # Update the MotifMatch object match information in the passed matches array
             matches[matches_index].var_gc = var_gc
