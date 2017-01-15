@@ -213,6 +213,81 @@ class MotifArray:
 
         return matches
 
+    def motif_match_int_print(self, baseline_p, ref_seq, var_seq, wing_l, file_name, new_file):
+        """
+        Same as motif_match_int except instead of returning a match set
+        filtered on thresholds the function prints all comma separated scores
+        one line for variant set and one line for reference set
+
+        column 1 is code for variant or reference
+
+        Takes a reference and variant sequence integer representation,
+        then checks for matches in the motif set.
+        Outputs match score for both ref seq and var seq to file
+
+        Args:
+            baseline_p = array of baseline probabilities of each base,
+                in order (A, C, G, T). Probabilities should sum to 1.
+                see get_baseline_probs()
+            ref_seq = Reference sequence integer representation (0-4 only)
+            var_seq = Variant sequence integer representation (0-4 only)
+            wing_l = Integer length of sequence of bases flanking the variant
+                (generally >= self.max_positions, should match value used to
+                create ref_seq and var_seq)
+            file_name = file to write to
+            new_file = TRUE then prints header with motif names
+
+        Returns:
+            output is printed to file_name
+
+        """
+
+        # 1. scoring returns: motif match array with the form
+        #    (id, name, threshold, max_score, match_seq)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
+
+        # 2. open the file
+        write_header = False
+        if new_file:
+            output_fh = open(file_name, "w")
+            write_header = True
+        else:
+            # attempt to append to existing file
+            import os
+            if os.path.exists(file_name):
+                output_fh = open(file_name, "a")
+                write_header = False
+            else:
+                output_fh = open(file_name, "w")
+                write_header = True
+
+        # 3. print the header
+        if write_header:
+            # motif_scores_int only skips if not valid so must check when building line
+            line = '#line_type'
+            for motif_index in range(len(self.motifs)):
+                if not self.motifs[motif_index].valid_flag:
+                    continue
+                line = line + "," + self.motifs[motif_index].name
+            print(line, file=output_fh)
+
+        # 4. print the motif scores for the variant
+        line = 'v'
+        for idx in range(len(scored)):
+            (iden, name, th, max_score, match_seq, motif_index) = scored[idx]
+            line = line + "," + max_score
+        print(line, file=output_fh)
+
+        # 5. print the motif scores for the variant
+        line = 'r'
+        for idx in range(len(r_scored)):
+            (iden, name, th, max_score, match_seq, motif_index) = r_scored[idx]
+            line = line + "," + max_score
+        print(line, file=output_fh)
+
+        output_fh.close()
+
     def motif_match_np(self, baseline_p, ref_seq, var_seq, wing_l):
         """
         Takes a reference and variant sequence integer representation,
