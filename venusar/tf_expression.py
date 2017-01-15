@@ -1,13 +1,18 @@
 #!/usr/bin/env python
 """
-For a given motif annotated vcf file (already run through motifs.py) and a gene expression file, remove all motif
-matches for TFs that are not expressed in at least one sample above the specified threshold.
+Input type 1: (-i, -o): For a given motif annotated vcf file (already run through motifs.py)
+Input type 2: (-i, -m, -mo): For a given vcf file (used for samples), filter the motif file
+
+With motifs from either input type and a gene expression file (-e), process the motif set to
+remove all motif matches for TFs that are not expressed in at least one sample above the
+specified threshold.
 
 Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTIONS]
 
 Args:
     -i (required) <input.vcf>: Name of sorted variant file to process.
     -o (required) <output.vcf>: Name of output file to be created.
+        Not created if using -m and -mo
     -e (required) <expression.bed>: An expression 'bed' file.
     -m (optional) <motif.txt>: Tab-delimited key file containing a frequency
         matrix with each row corresponding to a base and each column
@@ -21,6 +26,7 @@ import sys
 import argparse
 import time
 import motif
+
 
 def parse_header(line):
     """
