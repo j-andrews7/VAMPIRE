@@ -115,7 +115,7 @@ class SequenceArray:
         """return length of the array"""
         return (len(self.seq))
 
-    def multivariant_list_build(self, limit_mv_dist, wing_l, fasta_object):
+    def multivariant_list_build(self, limit_mv_dist, fasta_object):
         """
         For the set of sequence elements use position, samples, wing size,
         and user defined overlap extent (limit_mv_dist) integer to join
@@ -138,8 +138,6 @@ class SequenceArray:
             limit_mv_dist = integer distance from starting SequenceElement
                 position to search for a match within the chromosome name
                 and sample set overlap
-            wing_l = Integer number of bases on each side of variant to return (wing
-                length) as full sequence.
             fasta_object = indexed fasta file object
 
         Returns
