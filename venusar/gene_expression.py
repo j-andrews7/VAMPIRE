@@ -27,10 +27,17 @@ Args:
     -eth (int, optional) = If given, will exclude genes that are below this threshold for all
         samples in the expression file. Good for excluding genes that aren't expressed. 0 by default.
 """
-# TODO - This is very incomplete.
+# TODO - This is very incomplete. # CCC-WK: Why?
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import argparse
 import time
 from statistics import mean, stdev
+
+
+def timeString():
+    """ Return time as a string YearMonthDay.Hour.Minute.Second
+    """
+    return time.strftime('%Y%m%d.%H:%M:%S')
 
 
 # TODO - Move into a utils.py file and import as appropriate.
@@ -400,7 +407,7 @@ def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, e
         include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie near
             a Locus and significantly affect its expression.
     """
-    print("Parsing expression data file.")
+    print("Parsing expression data file at: " + timeString() + ".")
     exp_samps, exp_data = parse_expression_file(exp_file, ethresh)
 
     # Set wing boundaries.
@@ -497,7 +504,7 @@ def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, e
             elif include_vcf:
                 print(line.strip(), file=output_vcf)
 
-    print("Complete.")
+    print("Complete at: " + timeString() + ".")
 
 
 if __name__ == '__main__':

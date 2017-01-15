@@ -28,6 +28,12 @@ import time
 from statistics import mean, stdev
 
 
+def timeString():
+    """ Return time as a string YearMonthDay.Hour.Minute.Second
+    """
+    return time.strftime('%Y%m%d.%H:%M:%S')
+
+
 # TODO - Move into a utils.py file and import as appropriate.
 class Position(object):
     """
@@ -436,7 +442,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie in
             a Locus and significantly affect its activity.
     """
-    print("Parsing activity data file.")
+    print("Parsing activity data file: " + timeString() + ".")
     act_samps, act_data = parse_activity_file(act_file)
 
     output_vcf = open(out_vcf, "w")
@@ -550,7 +556,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         if bed_out_line is not None:
             print(*bed_out_line, sep="\n", file=output_bed)
 
-    print("Complete.")
+    print("Complete: " + timeString() + ".")
 
 
 if __name__ == '__main__':
