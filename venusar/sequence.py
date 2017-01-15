@@ -231,7 +231,7 @@ class SequenceArray:
                 # now same chromosome, larger position within search distance
                 # but need to check for sample match and build set of overlapping samples
                 # self.seq[index] to self.seq[search_index] samples
-                overlap_samples = set(self.seq[index].samples).intersection(self.seq[search_index].samples)
+                overlap_samples = list(set(self.seq[index].samples).intersection(self.seq[search_index].samples))
                 if len(overlap_samples) == 0:
                     next
                 variant_str2 = self.seq[search_index].seq_var.seq
