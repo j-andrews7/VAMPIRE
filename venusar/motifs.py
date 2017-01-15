@@ -40,18 +40,21 @@ Args:
     -sk (optional flag): Use if sorted by karyotype.
     -fc (optional): filter_chip YYY; can not also be called with fn
     -fn (optional): filter_novel YYY; can not also be called with fc
+    -ht (optional): If included then runs homotypic matches. Absent then not run.
     -mv (optional) <ws>: merge adjacent variants for same chromosome and sample
-        that occur within passed integer distance. default distance = wing size.
+        that occur within passed integer distance. Use -1 to set = wing size.
+    -rf (optional): (boolean) if true then force variant reference bases
+        to match FASTA reference
 """
 
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import sys
 import argparse
 import time
-import pdb    # necessary for debugger; use pdb.set_trace()
+#import pdb    # necessary for debugger; use pdb.set_trace()
 import motif
 import sequence
 from pyfaidx import Fasta
-from Bio import motifs
 
 parser = argparse.ArgumentParser(usage=__doc__)
 
@@ -140,7 +143,9 @@ def update_vcf(line, matches, output_fileHandle, options):
         refscores += str(round(match.ref_score, 4))
         # Sequence environment data
         if match.var_gc is not None:
-            varht += sublist_str(match.var_ht, 4)
+            # use ref version because homotypic matches against wings are equal
+            # QQQ: question why bother exporting twice?!?
+            varht += sublist_str(match.ref_ht, 4)
             refht += sublist_str(match.ref_ht, 4)
             vargc += str(round(match.var_gc, 4))
             refgc += str(round(match.ref_gc, 4))
@@ -513,9 +518,11 @@ parser.add_argument("-fn", "--filter_novel", action="count", required=False)
 parser.add_argument("-fp", "--filter_co", action="count", required=False)
 parser.add_argument("-sk", "--kary_sort", action="count", required=False)
 parser.add_argument("-mv", "--multi_variant", dest="multi_var",
-    required=False, default=-1)    # use -1 and correct to wing_size below
-parser.add_argument("-rf", "--force_ref_match", dest="force_ref_match",
-    required=False, default=False)
+    required=False)    # use -1 and correct to wing_size below
+parser.add_argument("-rf", "--force_ref_match", action="count",
+    required=False)
+parser.add_argument("-ht", "--homotypic_run", action="count",
+    required=False)
 
 args = parser.parse_args()
 
@@ -536,10 +543,24 @@ if (args.multi_var is None):
 else:
     if (int(args.multi_var) == -1):
         multivar_distance = ws
+        multivar_computation_flag = True
+    elif int(args.multi_var) < 1:
+        multivar_distance = 0
         multivar_computation_flag = False
     else:
         multivar_distance = int(args.multi_var)
         multivar_computation_flag = True
+if args.homotypic_run is None:
+    run_homotypic = False
+    print("Not running homotypic matches code.")
+else:
+    print("Homotypic matches code will be run.")
+    run_homotypic = True
+if args.force_ref_match is None:
+    force_ref_match = False
+else:
+    print("User requested variant reference string must match genome reference string")
+    force_ref_match = True
 
 # Options list. Easier to pass in methods or use in code updates.
 options = Options_list()
@@ -612,7 +633,6 @@ if (options.filter_vcf_motif):
 
 if (not sorted_lex):
     opt_args += "    Input vcf and Input ChIP bed are sorted by karyotype\n"
-# XXX: add multivariant option output and force reference
 print(opt_args)    # debug outputs
 
 # Main -- Post Arguments
@@ -637,26 +657,25 @@ motif_set = motif.get_motifs(file_motif, pc, th, bp)
     # motif_set.motifs[index].positions    more 'valid'
 # debug print("Maximum motif length is "+str(motif_set.max_positions)+".")
 
-# need to grab sequence as full variant but only pull in
-# length around wing that is necessary
-# XXX:QQQ: what does it mean to use wing_l
-#        as the max of longest motif and argument ws?
+# grab extended 'wing' sequence around the reference and variant
+#    to accomodate motif size and homotypic matching
 #    1. motif matching for individual variants
-#        only uses individual motif length
+#        trims to only uses individual motif length wing
 #        therefore wing_l can not be greater than
 #        the individual motif length being processed
 #    2. homotypic match wants larger wing size
-#       XXX: need to check match for matches
-#   if wing_l less than max motif length then larger motifs are
-#          ignored during processing? what happens? QQQ
+#        to check for adjacent matches
+# only grabs wing sequence from reference genome
+#    then joins to build full variant length
+#
 # QQQ: should wing_length be the number of elements to grab or the maximum index?
 #        ie motif_set.max_positions or motif_set.max_positions - 1
 wing_l = max(motif_set.max_positions, ws)
-print("Proceeding with wing_size: " + format(wing_l) + " vs defined ws(" + format(ws) + ")" )
+print("Proceeding with wing_size: " + format(wing_l) + " vs defined ws(" + format(ws) + ")")
 
 # Open output file.
 fileHan_output = open(file_output, "w")
-# XXX: should check for output open here
+# XXX: should check for output open here, safer
 
 """#debug that motifs were calculated correctly
     for motif in motifs:
@@ -777,21 +796,15 @@ with open(file_input) as vcf_handle:
 
 print("Finished importing variants(" + timeString() + ")\n")
 
+# XXX: QQQ: split multi-allele input vcf objects?
+
 if multivar_computation_flag:
+    # expect lexicographic order for input but multivariant_list_build requires it
+    variant_set.sort()    # must sort before multivariant_list_build
     print("Start variant merge (" + timeString() + ").\n")
-    variant_set.multivariant_list_build(multivar_distance)
+    variant_set.multivariant_list_build(multivar_distance, fa_ind)
     print("Finished variant merge(" + timeString() + ").\n")
-    # XXX: sort variant_set by the chromosome name? karotype? use chr_less
-    #     or rather just insert multivariant items into middle of list
-    #     before next chromosome elements
-    # YYY: Typically, we'd expect lexicographic order for input, it's the standard
-    #     order for sorting this data typically. I don't think we need to build in
-    #     a sort, just tell users to sort their VCFs/bed files beforehand.
-    # CCC-WK: not user input. the sort has to do with creating multivariants from the
-    #     set of individual inputs. The program is doing work for the user, by
-    #     combining variants into super-variants, see email discussion.
-    #     so there needs to be a decision on where in the order to put
-    #     the super-variants for processing. also how to annotate in output
+    #     QQQ: super-variants for processing -- how to annotate in output?
 
 print("Analyzing variants(" + timeString() + "). This may take a while.\n")
 
@@ -811,6 +824,8 @@ for index in range(variant_set.length()):
     #    test for and only analyze if index not in variant_set.multivariant
     # YYY: Seems this will likely be a necessity, at least to me. May be a way
     #     around it, but I can't think of a better option off the top of my head.
+    # CCC-WK: likely only still an issue with multi-allele and just knowing
+    #     the item processed is a multi-variant (really long sequences?)
 
     # Update previous, next, and current variables
     if (chromosome != var_element.name):
@@ -824,17 +839,17 @@ for index in range(variant_set.length()):
     #
     print("\t\tpulling " + format(wing_l) +
         " base wings from index " + format(fa_ind) +
-        " arg: " + format(args.force_ref_match))
-    var_element.get_surround_seq(wing_l, fa_ind, args.force_ref_match)
+        " arg: " + format(force_ref_match))
+    var_element.get_surround_seq(wing_l, fa_ind, force_ref_match)
     # 2. compute reverse complement
     var_element.assign_rev_complement()
-    # 3. compute int version (XXX: after testing for speed up is confirmed)
+    # 3. compute int version (faster to process as int)
+    var_element.assign_int_versions()
 
     print("Calculating:\n" + var_element.print_str() + "at(" + timeString() + ")\n")
 
     # -- building the list of MotifMatch objects
-    # Calculate motif matches to variant sequence
-    var_element.assign_int_versions()
+    # 4. Calculate motif matches to variant sequence
     ref_seq = var_element.return_full_ref_seq_int(wing_l)
     var_seq = var_element.return_full_var_seq_int(wing_l)
     print("\tref int: " + format(ref_seq) +
@@ -842,27 +857,24 @@ for index in range(variant_set.length()):
     print("start motif_match_int")
     plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)
     #     plusmatch returns an list of MotifMatch objects
-    # Add local environment data: XXX: new version guessed intent see code
-    #    the process_local_env function never returned anything before
-    #    the individual iteration output was accumulated in a transient variable
-    #    and the output (presuming PLE had any) was not previously assigned
-    #
+    # 5. Add local environment data:
     print("start process_local_env_int")
     plusmatch = motif_set.process_local_env_int(bp, plusmatch, var_element,
-        None, var_seq, ref_seq, wing_l)
+        None, var_seq, ref_seq, wing_l, run_homotypic)
 
-    # Calculate motif matches to reverse complement
+    # 6. Calculate motif matches to reverse complement
     ref_seq_rc = var_element.return_full_ref_seq_reverse_complement_int(wing_l)
     var_seq_rc = var_element.return_full_var_seq_reverse_complement_int(wing_l)
     print("\tref rc int: " + format(ref_seq_rc) +
           "\n\tvar rc int: " + format(var_seq_rc))
     print("start motif_match_int reverse complement")
     minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
-    # Add local environment data
+    # 7. Add local environment data
     print("start process_local_env_int reverse complement")
     minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,
-        None, var_seq_rc, ref_seq_rc, wing_l)
+        None, var_seq_rc, ref_seq_rc, wing_l, run_homotypic)
 
+    # 8. Join two match sets
     matches = plusmatch + minusmatch
     print(("\t" + format(var_element.name) + ":" + format(var_element.position) +
         " +match(" + format(len(plusmatch)) +

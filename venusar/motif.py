@@ -6,6 +6,7 @@ does NOT contain a main function
 intended to be imported with motifs.py and other for related functionality
 """
 
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import sequence    # need sub_from_*, crop_from_*
                    # (maybe later need int func and split wing/core processing)
                    # then would want base sequence object
@@ -667,10 +668,12 @@ class MotifArray:
             # Find homotypic variant and reference matches
             h_matches = []
 
-            # YYY!: homotopic matches are not supposed to overlap the core sequence
-            #   Check each wing separately,
-            #   homotypic matches should not overlap the variant
+            # YYY!: homotypic match checks local environment around variant
+            #   for genuine match sites
+            #   homotopic matches are not supposed to overlap the core sequence
+            #   Check each wing separately without the core sequence,
             #   because variant and reference wings match only compute once
+            #   wing size can be bigger than the motify being checked
 
             # YYY: wing size = size of the motif matched? NO
             #     default wing size was +/- 50 bp from the variant position to
