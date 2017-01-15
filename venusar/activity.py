@@ -23,6 +23,8 @@ Args:
     -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
         vcf output? False by default, set to True if wanted.
 """
+
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import argparse
 import time
 from statistics import mean, stdev
@@ -420,7 +422,62 @@ def parse_activity_file(activity_file):
         return (act_samples, act_data)
 
 
-def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False):
+def reduce_activity_names(act_samps, split_string="_"):
+    """
+    Return only unique part of names in the passed list set.
+
+    Code assumes either start or end is unique based on unique set size
+
+    Args:
+        act_samps: list of strings for the activity samples
+            or dictionary with keys being strings for activity samples
+        split_string: String to split individual act_samps on
+            assumes single split is relevant
+            default = "_"
+    Returns:
+        act_samps modified to not include the non-unique part of the input strings
+        returns same type as the input act_samps, list or dict
+    """
+
+    split_one = []
+    split_two = []
+
+    for sample in act_samps:
+        # 1. split on split_string
+        splitList = sample.split(split_string)
+        # 2. put first split and all remaining splits in 2 arrays
+        split_one.append(splitList[0])
+        if len(splitList) == 1:
+            # because otherwise it adds an empty list item and breaks below
+            split_two.append("")
+        else:
+            split_two.append(split_string.join(splitList[1:]))
+
+    #3. determine the unique set size (just making it a set makes them unique
+    s1 = set(split_one)
+    s2 = set(split_two)
+
+    if len(s1) > len(s2):
+        # s2 is the non-unique part; ie s1 is unique
+        act_samps_temp = list(s1)
+    else:
+        # s1 is the non-unique part; ie s2 is unique
+        act_samps_temp = list(s2)
+
+    if type(act_samps) is list:
+        # do nothing just return
+        return (act_samps_temp)
+    elif type(act_samps) is dict:
+        # must rebuild the dictionary
+        act_samps_rebuild = {}
+        ind = -1
+        for sample in act_samps:
+            ind = ind + 1
+            act_samps_rebuild[act_samps_temp[ind]] = act_samps[sample]
+        return (act_samps_rebuild)
+
+
+def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False, drop_act_=1):
     """
     Compare activity of loci for samples harboring a variant within a given locus to those samples that do not.
 
@@ -441,6 +498,12 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             variant in them that significantly affects their activity.
         include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie in
             a Locus and significantly affect its activity.
+        drop_act_ (integer, optional): If > 0 then break activity items on _,
+            return only unique part of name.
+            code assumes either start or end is unique based on unique set size
+            once dropped reruns comparison to the vcf samples
+            if 1: only runs if prior vcf comparison results in no overlap
+            if 2: runs no matter what
     """
     print("Parsing activity data file: " + timeString() + ".")
     act_samps, act_data = parse_activity_file(act_file)
@@ -497,6 +560,25 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
         common_samps, valid_act_samps = compare_samples(act_samps, vcf_samples)  # Get common samples b/twn the two.
         print("Common samples: ", *common_samps, end="\n\n")
+        if drop_act_ > 0:
+            if drop_act_ == 1 and len(common_samps) == 0:
+                redo_compare = True
+                act_samps = reduce_activity_names(act_samps)
+            elif drop_act_ == 2:
+                redo_compare = True
+                # merge old and new samps to match when compare_samples is run below
+                # if they were just lists the following would work but they are not
+                # act_samps = list(set(reduce_activity_names(act_samps)) | set(list(act_samps)))
+                extend_dict = reduce_activity_names(act_samps)
+                for extdictkey in extend_dict:
+                    act_samps[extdictkey] = extend_dict[extdictkey]
+            else:
+                redo_compare = False
+            if redo_compare:
+                # Get common samples b/twn the two input sets: vcf and activity.
+                common_samps, valid_act_samps = compare_samples(act_samps, vcf_samples)
+                print("Updated Common samples: ", *common_samps, end="\n\n")
+
         print("Processing variants. This may take some time.")
         # TODO - Progress bar might actually be a decent addition.
 
