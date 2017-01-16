@@ -759,8 +759,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
     print("Proceeding with wing_size: " + format(wing_l) + " vs defined ws(" + format(ws) + ")")
 
     # Open output file.
-    fileHan_output = open(file_output, "w")
-    # XXX: should check for output open here, safer
+    fileHan_output = open(file_output, "w")  # check unnecessary; import os; os.path.exists()
 
     """#debug that motifs were calculated correctly
         for motif in motifs:
