@@ -61,7 +61,7 @@ if args.threshold is not None:
     d_th = float(args.threshold)
 else:
     d_th = None
-ow = args.overwrite is not None
+ow = args.overwrite
 fpr = float(args.false_pos_rate)
 pe = int(args.precision_exp)
 if pe > 5:
