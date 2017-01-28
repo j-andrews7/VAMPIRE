@@ -1,16 +1,16 @@
 import click
-import venusar.thresholds
-import venusar.motifs
-import venusar.activity
-import venusar.tf_expression
-import venusar.gene_expression
+#import venusar.thresholds
+#import venusar.motifs
+#import venusar.activity
+#import venusar.tf_expression
+#import venusar.gene_expression
 import os
 import re
 
+#@click.command()
+#@click.option('--as-cowboy', '-c', is_flag=True, help='Greet as a cowboy.')
+#@click.argument('name', default='world', required=False)
 
-@click.command()
-@click.option('--as-cowboy', '-c', is_flag=True, help='Greet as a cowboy.')
-@click.argument('name', default='world', required=False)
 def cli(name, as_cowboy):
     """
     Driven is a full-fledged bioinformatics suite geared towards easy integration of multiple types of big data to make
@@ -58,7 +58,7 @@ def read_config(file_name='venusar_default.config', replace_ref=True):
     var2val = {}
     ref2val = {}
 
-    if not os.path.exists():
+    if not os.path.exists(file_name):
         print(('read_config failed no file for: ' + file_name))
         return (var2val, ref2val)
 
@@ -74,6 +74,8 @@ def read_config(file_name='venusar_default.config', replace_ref=True):
     current_program_name = ""
     reference_count = 0
     for line in fileHan:
+        if len(line) < 2:
+            continue
         # process comment lines
         if re.search(search_pattern_comment, line) is not None:
             continue
@@ -92,18 +94,18 @@ def read_config(file_name='venusar_default.config', replace_ref=True):
         # var = refN
         # testline: line = 'help me = two five\tREFN'
         line = line.strip().split('#')[0]    # drop post comment information
-        line_set = line.split('\t')              # split on tab for references
+        line_set = line.split('\t')          # split on tab for references
         var_set = line_set[0].split('=')     # split variable = value
         # variable w/o leading/trailing spaces: var_set[0].rstrip().lstrip()
         # value w/o leading/trailing spaces: var_set[1].rstrip().lstrip()
-        if len(var2val) > 0:
+        if len(var_set) > 1:
             # variable=value pair; but first check keys for duplicate variable!
             if (current_program_name, var_set[0]) in var2val:
                 # QQQ: how to handle multiple var keys if for different methods!
                 #     double up the key as a tuple; lists do NOT work
                 print(('WARNING: duplicate value for ' + current_program_name + "::"
                     + var_set[0] + " using current value."))
-                var2val[(current_program_name, var_set[0])] = var_set[1]
+            var2val[(current_program_name, var_set[0])] = var_set[1]
             if current_program_name in method_set:
                 method_set[current_program_name].append(var_set[0])
             else:
@@ -125,7 +127,7 @@ def read_config(file_name='venusar_default.config', replace_ref=True):
     while cref > 0:
         count_change = False    # reset
         for ref_key in list(ref2val.keys()):
-            if ref2val[ref2val[ref_key]] in ref2val:
+            if ref2val[ref_key] in ref2val:
                 # referenced a reference! replace if not self-referential
                 if not(ref2val[ref2val[ref_key]] == ref2val[ref_key]):
                     ref2val[ref_key] = ref2val[ref2val[ref_key]]
