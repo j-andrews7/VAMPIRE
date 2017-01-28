@@ -40,66 +40,75 @@ def timeString():
     return time.strftime('%Y%m%d.%H:%M:%S')
 
 
-# TODO - Main function, etc.
-parser.add_argument("-m", "--motif", dest="motif_file", required=True)
-parser.add_argument("-o", "--outfile", dest="motif_outfile", required=True)
-parser.add_argument("-bp", "--baseline", dest="baseline_file", required=False, default=None)
-parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts", required=False, default=0.1, type=float)
-parser.add_argument("-th", "--threshold", dest="threshold", required=False)
-parser.add_argument("-fpr", "--falsepos", dest="false_pos_rate", required=False, default=0.05, type=float)
-parser.add_argument("-pe", "--precision", dest="precision_exp", required=False, default=4, type=int)
-parser.add_argument("-ow", "--overwrite", action="store_true", required=False)
+def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):
+    thresholds = []
+    background = {'A': bp[0], 'C': bp[1], 'T': bp[2], 'G': bp[3]}
+    print(("Baseline nucleotide frequencies:\n\t" + str(background)))
 
-args = parser.parse_args()
+    print(("Calculating thresholds (" + timeString() + "). This could take a while."))
+    sys.stdout.flush()
+    idx = 0
+    print_exponent = 1
 
-if args.baseline_file is not None:
-    bp = [0.25, 0.25, 0.25, 0.25]
-else:
-    bp = motif.get_baseline_probs(args.baseline_file)
-pc = args.pseudocounts
-if args.threshold is not None:
-    d_th = float(args.threshold)
-else:
-    d_th = None
-ow = args.overwrite
-fpr = float(args.false_pos_rate)
-pe = int(args.precision_exp)
-if pe > 5:
-    print(("Warning: high precision exponent (-pe=" +
-        str(pe) + ") may cause drastic slowing or memory errors"))
-if pe <= 0:
-    pe = 1
-    print(("Precision exponent (-pe) too low, set to " + str(pe)))
+    # Calculate thresholds using biopython
+    fh = open(motif_file)
+    for m in motifs.parse(fh, "jaspar"):
+        pwm = m.counts.normalize(pseudocounts=pc)    # creates dictionary like representation
+        pssm = pwm.log_odds(background)              # converts to log_odds vs background
+        # Precision argument of 4 was recommended by biopython's documentation (slow step)
+        distribution = pssm.distribution(background=background, precision=10 ** pe)
+        m_th = distribution.threshold_fpr(fpr)
+        thresholds.append(m_th)
+        # print progress
+        idx += 1
+        if (idx >= 10 ** print_exponent):
+            print((str(idx) + " thresholds calculated... at " + timeString()))
+            print_exponent += 1
+            sys.stdout.flush()
 
-thresholds = []
-background = {'A': bp[0], 'C': bp[1], 'T': bp[2], 'G': bp[3]}
-print(("Baseline nucleotide frequencies:\n\t" + str(background)))
+    print(("Total motifs read: " + str(len(thresholds))))
 
+    print("Outputing thresholds")
+    motif.get_put_motifs(motif_file, motif_outfile, d_th, ow, thresholds)
 
-print(("Calculating thresholds (" + timeString() + "). This could take a while."))
-sys.stdout.flush()
-idx = 0
-print_exponent = 1
+    print(("Done (" + timeString() + ")"))
 
-# Calculate thresholds using biopython
-fh = open(args.motif_file)
-for m in motifs.parse(fh, "jaspar"):
-    pwm = m.counts.normalize(pseudocounts=pc)    # creates dictionary like representation
-    pssm = pwm.log_odds(background)              # converts to log_odds vs background
-    # Precision argument of 4 was recommended by biopython's documentation (slow step)
-    distribution = pssm.distribution(background=background, precision=10 ** pe)
-    m_th = distribution.threshold_fpr(fpr)
-    thresholds.append(m_th)
-    # print progress
-    idx += 1
-    if (idx >= 10 ** print_exponent):
-        print((str(idx) + " thresholds calculated... at " + timeString()))
-        print_exponent += 1
-        sys.stdout.flush()
+if __name__ == '__main__':
 
-print(("Total motifs read: " + str(len(thresholds))))
+    # TODO - Main function, etc.
+    parser.add_argument("-m", "--motif", dest="motif_file", required=True)
+    parser.add_argument("-o", "--outfile", dest="motif_outfile", required=True)
+    parser.add_argument("-bp", "--baseline", dest="baseline_file", required=False, default=None)
+    parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
+        required=False, default=0.1, type=float)
+    parser.add_argument("-th", "--threshold", dest="threshold", required=False)
+    parser.add_argument("-fpr", "--falsepos", dest="false_pos_rate",
+        required=False, default=0.05, type=float)
+    parser.add_argument("-pe", "--precision", dest="precision_exp",
+        required=False, default=4, type=int)
+    parser.add_argument("-ow", "--overwrite", action="store_true", required=False)
 
-print("Outputing thresholds")
-motif.get_put_motifs(args.motif_file, args.motif_outfile, d_th, ow, thresholds)
+    args = parser.parse_args()
 
-print(("Done (" + timeString() + ")"))
+    motif_file = args.motif_file
+    motif_outfile = args.motif_outfile
+    if args.baseline_file is not None:
+        bp = [0.25, 0.25, 0.25, 0.25]
+    else:
+        bp = motif.get_baseline_probs(args.baseline_file)
+    pc = args.pseudocounts
+    if args.threshold is not None:
+        d_th = float(args.threshold)
+    else:
+        d_th = None
+    ow = args.overwrite
+    fpr = float(args.false_pos_rate)
+    pe = int(args.precision_exp)
+    if pe > 5:
+        print(("Warning: high precision exponent (-pe=" +
+            str(pe) + ") may cause drastic slowing or memory errors"))
+    if pe <= 0:
+        pe = 1
+        print(("Precision exponent (-pe) too low, set to " + str(pe)))
+
+    main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe)
