@@ -28,6 +28,7 @@ from __future__ import print_function    # so Ninja IDE will stop complaining & 
 import argparse
 import time
 from statistics import mean, stdev
+from sequence import read_line2sample_list
 
 
 def timeString():
@@ -351,28 +352,6 @@ def get_activity_samples(header_line):
     return act_samples
 
 
-def get_vcf_samples(header_line):
-    """
-    Parse header of VCF file to return sample names found in file.
-
-    Args:
-        header_line (str): Header line from VCF file.
-
-    Returns:
-        vcf_samples (list of str): List of samples with data in VCF file.
-    """
-    line_list = header_line.strip().split("\t")
-    samples = line_list[9:]
-    vcf_samples = []
-
-    for item in samples:
-        sample = item.split(".")[-1]
-        if sample not in vcf_samples:
-            vcf_samples.append(sample)
-
-    return vcf_samples
-
-
 def compare_samples(act_samples, vcf_samples):
     """
     Compare samples from activity file and vcf file.
@@ -550,7 +529,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             print(line, file=output_vcf)
             line = f.readline().strip()
 
-        vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
+        vcf_samples = read_line2sample_list(line)  # Parse VCF sample header line to get samples present in file.
 
         print(line, file=output_vcf)
 

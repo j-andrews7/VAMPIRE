@@ -460,7 +460,7 @@ class SequenceElement:
     def assign_samples(self, file_samples_array):
         """
         Convert passed sparse array into array of populated items only
-        Use in conjunction with read_line2sample_dictionaries()
+        Use in conjunction with multivariant_list_build()
         Function must assume that array is the same size dictionary sample set
 
         Args:
@@ -843,7 +843,7 @@ def read_line2sample_dictionaries(headerString):
         2 dictionaries (see above description)
         (samplesByName, samplesByIndex)
 
-    reference: based on get_vcf_samples
+    reference: based on read_line2sample_list
     QQQ: may be better to use list and use var.index(name) to get index
     CCC-JA: This could be an issue if multiple columns are for the same sample.
         This might occur if a user is using multiple methods to call their variants
@@ -881,6 +881,30 @@ def read_line2sample_dictionaries(headerString):
         samplesByIndex[index] = sampleName
 
     return (samplesByName, samplesByIndex)
+
+
+def read_line2sample_list(header_line):
+    """
+    Parse header of VCF file to return sample names found in file.
+
+    Args:
+        header_line (str): Header line from VCF file.
+
+    Returns:
+        vcf_samples (list of str): List of samples with data in VCF file.
+
+    Reference:previously: get_vcf_samples
+    """
+    line_list = header_line.strip().split("\t")
+    samples = line_list[9:]
+    vcf_samples = []
+
+    for item in samples:
+        sample = item.split(".")[-1]
+        if sample not in vcf_samples:
+            vcf_samples.append(sample)
+
+    return vcf_samples
 
 
 def sub_from_end(sequence_string, return_length):

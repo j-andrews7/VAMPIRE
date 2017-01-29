@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-For the specified vcf and expression file, determine which genes are located within a specific range
-from each variant. These are noted and their z-scores determined for samples with vs without the
-variant.
+For the specified vcf and expression file, determine which genes are located within a
+specific range from each variant. These are noted and their z-scores determined for
+samples with vs without the variant.
 
-Usage: python3 gene_expression.py -i <input.vcf> -e <expression.bed> -ov <output.vcf> -ob <output.bed> [OPTIONS]
+Usage: python3 gene_expression.py -i <input.vcf> -e <expression.bed>
+    -ov <output.vcf> -ob <output.bed> [OPTIONS]
 
+XXX these args are deprecated (some absent/undefined)
 Args:
     -i (str) = Name of vcf file to process.
     -e (str) = Name of expression file.
@@ -32,6 +34,7 @@ from __future__ import print_function    # so Ninja IDE will stop complaining & 
 import argparse
 import time
 from statistics import mean, stdev
+from sequence import read_line2sample_list
 
 
 def timeString():
@@ -312,28 +315,6 @@ def get_expression_samples(header_line):
     return exp_samples
 
 
-def get_vcf_samples(header_line):
-    """
-    Parse header of VCF file to return sample names found in file.
-
-    Args:
-        header_line (str): Header line from VCF file.
-
-    Returns:
-        vcf_samples (list of str): List of samples with data in VCF file.
-    """
-    line_list = header_line.strip().split("\t")
-    samples = line_list[9:]
-    vcf_samples = []
-
-    for item in samples:
-        sample = item.split(".")[-1]
-        if sample not in vcf_samples:
-            vcf_samples.append(sample)
-
-    return vcf_samples
-
-
 def compare_samples(exp_samples, vcf_samples):
     """
     Compare samples from expression file and vcf file.
@@ -450,7 +431,7 @@ def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, e
             print(line, file=output_vcf)
             line = f.readline().strip()
 
-        vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
+        vcf_samples = read_line2sample_list(line)  # Parse VCF sample header line to get samples present in file.
         print(line, file=output_vcf)
 
         print("Comparing samples in VCF file and expression file to find commonalities.\n")
