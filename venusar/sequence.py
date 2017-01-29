@@ -872,12 +872,17 @@ def read_line2sample_dictionaries(headerString):
         if (index > 0) and (sampleName in samplesByName):
             # WARNING: previously defined key Name! QQQ: occurs? If yes --> bad
             print((sampleName + " at " + format(index) + " repeat of index " +
-                    samplesByName[sampleName]))
-            # make sampleName unique by adding index
-            sampleName += format(index)
+                    format(samplesByName[sampleName])))
+            # add to the dictionary By Name (repeated)
+            try:
+                samplesByName[sampleName].append(index)
+            except:
+                samplesByName[sampleName] = [samplesByName[sampleName], index]
+        else:
+            # add to the dictionary By Name (no repeat)
+            samplesByName[sampleName] = index
 
-        # add to the dictionary
-        samplesByName[sampleName] = index
+        # add to the dictionary by Index
         samplesByIndex[index] = sampleName
 
     return (samplesByName, samplesByIndex)

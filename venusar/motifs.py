@@ -58,6 +58,7 @@ import time
 #import pdb    # necessary for debugger; use pdb.set_trace()
 import motif
 import sequence
+import vcf
 from pyfaidx import Fasta
 
 parser = argparse.ArgumentParser(usage=__doc__)
@@ -834,48 +835,8 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         #     and probably look a lot cleaner.
         # CCC-WK: note has to do with whether it used again or not, best way to handle
 
-        # Process each variant
-        eof_counter = 0
-        while True:
-            # Reads in the next line of the vcf
-            # adds the next variant's information to the element array object
-
-            line = vcf_handle.readline()
-
-            if line is None:    # stop infinite loop
-                print('debug: stop file read with count' + format(eof_counter))
-                break
-
-            # skip empty and information lines
-            if line.startswith("##"):
-                continue
-            if line == "":
-                # handle while True infinite loop try to find End of File
-                if (eof_counter > 1):
-                    break
-                else:
-                    eof_counter += 1
-
-            line = line.strip()
-
-            # skip empty lines (after removing arbitrary whitespace characters)
-            if line == "":
-                continue
-
-            # -- process valid variant lines
-            line_list = line.split("\t")
-            # variant creation: add_seq_defined(chromosome, position, reference_seq, variant_seq):
-            # variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
-            new_sequence_element = sequence.SequenceElement()
-            new_sequence_element.assign(line_list[0], int(line_list[1]), line_list[3], line_list[4])
-            # grab samples for variant
-            new_sequence_element.assign_samples(line_list[9:])
-            # push full line (memory hog, but allows multivar computation
-            #    w/o significant code manipulation to track which line is current
-            #    already processed, etc.)
-            new_sequence_element.vcf_line = line
-            variant_set.add_seq(new_sequence_element)
-            print("\tadd element " + new_sequence_element.name + "::" + timeString())
+        # Process each variant; reads the variant lines in a loop
+        variant_set = vcf.read_vcf_variant_lines(vcf_handle, False)
 
     print("Finished importing variants(" + timeString() + ")\n")
 
