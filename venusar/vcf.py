@@ -117,3 +117,10 @@ def read_vcf_variant_lines(file_handle, verbose_flag=False):
             print(("\tadd element " + new_sequence_element.name))
 
     return (variant_set)
+
+
+# XXX add code to read MOTIF Scores from the 7th tab separated element; see update_vcf_motifs_info
+# QQQ is the motifs.py print_peak code ever hit? check output
+# QQQ would it be better to use activity.py variant class to accomplish this objective?
+#    or modify activity.py to use the full sequence class objects and vcf functions?
+# XXX add code to read activity.py:get_variant_output() information; SAMPS* and LOCI* with zscores
