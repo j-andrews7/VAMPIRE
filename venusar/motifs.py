@@ -198,9 +198,7 @@ def update_vcf(line, matches, output_fileHandle, options):
     if to_be_printed == 0:
         if (not options.filter_vcf_motif and not options.filter_vcf_chip
             and not options.filter_vcf_no):
-            print(line, file=output_fileHandle)    # QQQ: ide complains about syntax, but test ran in interactive mode; is this line bad?
-                                                   # YYY: Seems fine to me? What's the syntax error? Indentation is a little weird
-                                                   #     looking due to the multiline if statement, but should work fine.
+            print(line, file=output_fileHandle)
         return
 
     outline = ""
@@ -210,14 +208,8 @@ def update_vcf(line, matches, output_fileHandle, options):
         if outline != "":
             outline += "\t"
         if idx == 7:
-            outline += "MOTIFN=" + names + ";MOTIFV=" + varscores + ";MOTIFR=" + refscores
-            if refgc != "":
-                outline += ";MOTIFVH=" + varht + ";MOTIFRH=" + refht
-                outline += ";MOTIFVG=" + vargc + ";MOTIFRG=" + refgc
-            if (options.chip_present):
-                outline += ";MOTIFC=" + chips
-            if col != '.':
-                outline += ";" + col
+            outline = update_vcf_motifs_info(outline, names, varscores, refscores,
+                varht, refht, vargc, refgc, options, chips, col)
         else:
             outline += col
         idx += 1
@@ -225,13 +217,44 @@ def update_vcf(line, matches, output_fileHandle, options):
     if idx < 7:
         print("**Error** VCF formatted incorrectly. Less than 8 columns found:\n" + line)
         # Add output at the end anyway
-        outline += "\tMOTIFN=" + names + ";MOTIFV=" + varscores + ";MOTIFR=" + refscores
-        if (options.chip_present):
-            outline += ";MOTIFC=" + chips
+        outline += "\t"
+        outline = update_vcf_motifs_info(outline, names, varscores, refscores,
+                varht, refht, vargc, refgc, options, chips, col)
 
     print(outline, file=output_fileHandle)
 
     return
+
+
+def update_vcf_motifs_info(outline, names, varscores, refscores, varht, refht,
+        vargc, refgc, options, chips, col):
+    """
+    Used in conjunction with update_vcf() to add motifs information to the line.
+    Reduces code maintenance by putting update code in 1 place
+
+    Args:
+        see update_vcf for definition
+        names      set of match strings; matching MOTIF
+        *scores    string of 4 digit decimal, set of scores as string
+        *ht
+        *gc        string of 4 digit decimal; gc count
+        options    options list
+        chips      Y or N
+        col        current column string
+    Returns:
+        Modifies passed outline string and returns modified copy
+    """
+
+    outline += "MOTIFN=" + names + ";MOTIFV=" + varscores + ";MOTIFR=" + refscores
+    if refgc != "":
+        outline += ";MOTIFVH=" + varht + ";MOTIFRH=" + refht
+        outline += ";MOTIFVG=" + vargc + ";MOTIFRG=" + refgc
+    if (options.chip_present):
+        outline += ";MOTIFC=" + chips
+    if col != '.':
+        outline += ";" + col
+
+    return outline
 
 
 def sublist_str(sublist, sig_figs):
