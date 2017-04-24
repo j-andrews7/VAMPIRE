@@ -29,49 +29,13 @@ import argparse
 import time
 from statistics import mean, stdev
 from sequence import read_line2sample_list
+from utils import Position
 
 
 def timeString():
     """ Return time as a string YearMonthDay.Hour.Minute.Second
     """
     return time.strftime('%Y%m%d.%H:%M:%S')
-
-
-# TODO - Move into a utils.py file and import as appropriate.
-class Position(object):
-    """
-    Use to represent and handle genomic ranges more easily.
-
-    Args:
-        chrom (str): Chromosome.
-        start (int): Start position.
-        end (int): End position.
-    """
-
-    def __init__(self, chrom, start_pos, end_pos):
-        self.chrom = chrom
-        self.start = start_pos
-        self.end = end_pos
-
-    def overlaps(self, pos_b):
-        """
-        Return whether self overlaps Position pos_b.
-
-        Args:
-            pos_b (Position): Another Position.
-
-        Returns:
-            bool: True if self overlaps with Position pos_b. False if not.
-        """
-        if pos_b is None:
-            return False
-
-        if self.chrom != pos_b.chrom:
-            return False
-
-        start1, start2, end1, end2 = (self.start, pos_b.start, self.end, pos_b.end)
-
-        return end1 >= start2 and end2 >= start1
 
 
 # TODO - Move into a utils.py file and import as appropriate. Add doc_string.
