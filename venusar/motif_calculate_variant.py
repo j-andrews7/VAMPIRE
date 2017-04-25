@@ -7,11 +7,7 @@ from pyfaidx import Fasta
 import pdb    # necessary for debugger; use pdb.set_trace()
 import numpy as np
 
-def timeString():
-    """ Return time as a string YearMonthDay.Hour.Minute.Second
-    """
-    return time.strftime('%Y%m%d.%H:%M:%S')
-
+from utils import timeString
 
 print(("Importing the motif_set " + timeString()))
 file_motif = '../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.txt'

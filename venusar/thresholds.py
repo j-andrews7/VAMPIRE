@@ -25,19 +25,16 @@ Args:
     -ow (optional flag) = OverWrite: If present, thresholds already present in
         the input file will be replaced in the output file.
 """
-from Bio import motifs
+
 import sys
 import argparse
+
+from Bio import motifs
+
 import motif
-import time
+from utils import timeString
 
 parser = argparse.ArgumentParser(usage=__doc__)
-
-
-def timeString():
-    """ Return time as a string YearMonthDay.Hour.Minute.Second
-    """
-    return time.strftime('%Y%m%d.%H:%M:%S')
 
 
 def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):

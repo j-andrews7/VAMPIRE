@@ -8,6 +8,8 @@ Intended to be imported with motifs.py and other for related functionality.
 XXX|YYY: note incomplete.
 """
 
+import time
+
 
 class Position(object):
     """
@@ -66,3 +68,9 @@ class Position(object):
 
     def __str__(self):
         return self.chrom + ":" + str(self.start) + "-" + str(self.end)
+
+
+def timeString():
+    """ Return time as a string YearMonthDay.Hour.Minute.Second
+    """
+    return time.strftime('%Y%m%d.%H:%M:%S')

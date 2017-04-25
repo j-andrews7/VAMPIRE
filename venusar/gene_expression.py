@@ -35,13 +35,7 @@ import argparse
 import time
 from statistics import mean, stdev
 from sequence import read_line2sample_list
-from utils import Position
-
-
-def timeString():
-    """ Return time as a string YearMonthDay.Hour.Minute.Second
-    """
-    return time.strftime('%Y%m%d.%H:%M:%S')
+from utils import Position, timeString
 
 
 # TODO - Move into a utils.py file and import as appropriate. Add doc_string.

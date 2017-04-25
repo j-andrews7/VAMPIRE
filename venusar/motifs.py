@@ -54,12 +54,14 @@ Args:
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import sys
 import argparse
-import time
 #import pdb    # necessary for debugger; use pdb.set_trace()
 import motif
 import sequence
 import vcf
+from utils import timeString
+
 from pyfaidx import Fasta
+
 
 parser = argparse.ArgumentParser(usage=__doc__)
 
@@ -84,12 +86,6 @@ class Options_list:
         # Is a ChIP peak bed file present?
         # -ci <chip_file.bed> will make this True
         self.chip_present = False
-
-
-def timeString():
-    """ Return time as a string YearMonthDay.Hour.Minute.Second
-    """
-    return time.strftime('%Y%m%d.%H:%M:%S')
 
 
 def multivar_computation_set(multi_var, default_distance):
