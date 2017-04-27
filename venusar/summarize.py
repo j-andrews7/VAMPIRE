@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-For a VEGAS'd VCF file, calculate a distance score for each motif, ChIP z-score, and gene expression z-score
-set for each variant. These values will be plotted in 3 dimensional space. Additionally, simple bed-like
-files are provided as output. One contains the scores for all motif, ChIP z-score, and gene expression z-score
-sets for all variants. An optional second contains only those sets that meet the distance score threshold as
-defined by the user. A third will report the sets for the top 100 distance scores.
+For a VEGAS'd VCF file, calculate a distance score for each motif delta score, ChIP z-score, and gene expression
+z-score set for each variant. These values will be plotted in 3 dimensional space. Additionally, simple bed-like files
+are provided as output. One contains the scores for all motif, ChIP z-score, and gene expression z-score sets for all
+variants. An optional second contains only those sets that meet the distance score threshold as defined by the user.
+A third will report the sets for the top 100 distance scores.
 
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
 
@@ -45,7 +45,10 @@ class Variant(object):
         self.info_fields = self.line_list[7].split(";")
         (self.common_samples, self.motif_fields, self.exp_fields, self.act_fields,
             self.genes) = self.parse_info_fields()
-        self.motif_scores = self.get_motif_scores()
+        self.motif_scores = self.get_motif_scores()  # Calculate delta motif scores and place into a dict.
+        self.sample_data = self.get_sample_data()  # Parse all combos of gene expression and loci activity data.
+
+        self.output, self.full_dist_metrics = self.get_variant_summary()  # Get output lines as a list of lists.
 
         if self.common_samples is not None:  # Should never evaluate to False.
             self.num_com_samps = len(self.common_samples)
@@ -102,7 +105,7 @@ class Variant(object):
             elif name.startswith("LOCI") or name.startswith("SAMP"):
                 act_fields.append(field)
                 # Get variant samples with locus activity data.
-                if name == "SAMPSTV":
+                if name == "SAMPSV":
                     act_samples = data.split(",")
 
         common_samples = compare_samples(exp_samples, act_samples)
@@ -133,23 +136,26 @@ class Variant(object):
 
         for i in names:
             idx = names.index(i)
-            diff = var_scores[idx] - ref_scores[idx]
+            diff = float(var_scores[idx]) - float(ref_scores[idx])
             motifs[i] = diff
 
         return motifs
 
-    # XXX-JA 04/25/2017 - Incomplete.
-
     def get_sample_data(self):
         """
-        Parses and returns the gene expression and loci activity z-scores for a given sample.
+        Parses and returns the gene expression and loci activity z-scores for variant samples.
 
         Returns:
-            motifs (dict of floats): {motif_name: (variant - reference log likelihood ratios)}
+            sample_data (list of lists of str): [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
+                                                 [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
         """
 
         samples = self.common_samples
         act_data = [x.split("=") for x in self.act_fields]
+        exp_data = [x.split("=") for x in self.exp_fields]
+        genes = self.genes
+
+        sample_data = []
 
         for x in act_data:
             # Get loci id.
@@ -157,26 +163,64 @@ class Variant(object):
                 loci = x[1].split(",")
             # Get each set of z-scores for each loci.
             elif x[0] == "LOCIVZ":
-                z_scores = [x.strip("(").strip(")") for x in x[1].split("),(")]  
-            
+                act_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
-        for i in names:
-            idx = names.index(i)
-            diff = var_scores[idx] - ref_scores[idx]
-            motifs[i] = diff
+        # Create dict for loci - {loci_id: [act_z_scores]}
+        loci_data = {k: v for k, v in zip(loci, act_z_scores)}
 
-        return motifs
+        for x in exp_data:
+            # Get each set of z-scores for each gene.
+            if x[0] == "EXPVZ":
+                gene_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
-    # XXX-JA 04/24/2017 - Incomplete. Will create a list of output lines for a given Variant for the
-    # summarization report.
+        # Create dict for genes - {gene: [gene_z_scores]}
+        gene_data = {k: v for k, v in zip(genes, gene_z_scores)}
 
-    def get_variant_summary(self, d_thresh):
+        # Create list of lists containing all sets of relevant data combinations for all samples with a variant.
+        # [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
+        #  [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
+        for i in samples:  # First iterate through all samples and get their expression and activity indices.
+            e_idx = samples[i][0]
+            a_idx = samples[i][1]
+
+            for l in loci_data:  # Iterate through each locus for given sample.
+                # print(loci_data[l], str(a_idx), sep="\t")
+                samp_act_z = loci_data[l][a_idx]
+
+                for g in gene_data:  # And now each gene for each locus.
+                    samp_exp_z = gene_data[g][e_idx]
+
+                    sample_data.append([i, l, samp_act_z, g, samp_exp_z])
+
+        return sample_data
+
+    def get_variant_summary(self):
         """
-        Creates a list of summary output lines for a given Variant.
+        Creates a list of summary output fields for a given Variant as well as its distance metrics for plotting.
 
         Returns:
-            output (list of str): List of output lines for the Variant.
+            output_fields (list of lists of str): List of lists of output fields for the Variant.
+            dist_metric_lists (list of lists of floats): List of lists of floats containing [x,y,z] dist metrics.
         """
+        var_info = [self.pos.chrom, self.pos.start, self.ref_allele, self.var_allele]
+        motif_info = self.motif_scores
+        sample_info = self.sample_data
+
+        output_fields = []
+        dist_metric_lists = []
+
+        for m in motif_info:
+            m_score = motif_info[m]  # Motif delta score for var vs ref.
+
+            for s in sample_info:
+                dist_metrics = [float(m_score), float(s[2]), float(s[4])]  # To be used for plotting later.
+                dist_score = calc_distance(dist_metrics)
+                dist_metric_lists.append(dist_metrics)
+                # Create complete list of output fields.
+                output_fields.append(var_info + [m] + [m_score] + [s[0]] + [s[1]] + [s[2]] + [s[3]] +
+                                     [s[4]] + [dist_score])
+
+        return (output_fields, dist_metric_lists)
 
 
 def compare_samples(exp_samples, act_samples):
@@ -216,18 +260,21 @@ def calc_distance(score_array):
 
 def plot_distances(score_array, out_prefix):
     """
-    Plot distance scores calculated for the motif log-odds ratios, activity z-score, and gene expression
+    Plot distance scores calculated for the delta var/ref motif log-odds ratios, activity z-score, and gene expression
     z-score sets for each variant.
 
     Args:
-        score_array (numpy array) = Array containing all log-odds ratio, activity z-score, and gene expression
-            z-score sets for each variant.
+        score_array (numpy array) = Array containing all delta var/ref log-odds ratio, activity z-score, and gene
+            expression z-score sets for each variant.
         out_prefix (str) = Prefix to use for plot outputs.
     """
 
-    x, y, z = np.random.multivariate_normal(np.array([0, 0, 0]), np.eye(3), 400).transpose()
+    x, y, z = np.array(score_array).transpose()
+    print(score_array[0])
+    print(x[0], y[0], z[0], sep="\t")
 
     trace1 = go.Scatter3d(
+        name="Distances",
         x=x,
         y=y,
         z=z,
@@ -247,11 +294,39 @@ def plot_distances(score_array, out_prefix):
             r=0,
             b=0,
             t=0
+        ),
+        title='Distances from Average for Individual Variant Events',
+        scene=dict(
+            xaxis=dict(
+                title='log2 Var/Ref Motif Log-Odds Ratio Difference',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+            yaxis=dict(
+                title='Enhancer Activity z-Score',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+            zaxis=dict(
+                title='Gene Expression z-Score',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            )
         )
     )
+
     fig = go.Figure(data=data, layout=layout)
-    plotly.offline.plot(fig, filename=out_prefix + '.html')
-    py.image.save_as(fig, filename=out_prefix + '.png')
+    # py.image.save_as(fig, filename=out_prefix + '.png')
+    plotly.offline.plot(fig, filename=out_prefix + '.html', auto_open=False, image="png", image_filename=out_prefix)
 
 
 def main(vcf_file, out_prefix, d_thresh):
@@ -268,16 +343,83 @@ def main(vcf_file, out_prefix, d_thresh):
         line = f.readline().strip()
         now = time.strftime("%c")
 
-        command = ('##venusaur=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
-                   ' --expression ' + exp_file + ' --outputvcf ' + out_vcf +
-                   ' --threshold ' + str(thresh) + ' --include_vcf ' + str(include_vcf) + '">')
+        command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+                   ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
+        print(command)
+
+        full_out_file = open(out_prefix + "_full.txt", "w")  # Full output.
+        top_out_file = open(out_prefix + "_top100.txt", "w")  # Top 100 hits.
+
+        if d_thresh != 0:
+            rest_out_file = open(out_prefix + "_restricted.txt", "w")  # Restricted by distance threshold.
+
+        all_output = []
+        restricted_output = []
+        top_output = []
+
+        full_dist_metrics = []  # Hold all dist metrics.
+        restricted_dist_metrics = []  # Hold only those that meet the distance threshold.
+        top_dist_metrics = []  # Hold top 100 greatest distances.
 
         # Print new info lines at the top of the ##INFO section.
-        while line.startswith("##"):
+        while line.startswith("#"):
             line = f.readline().strip()
 
         for line in f:
-            current_var = Variant(line)
+            current_var = Variant(line)  # Most processing happening here.
+
+            # Piece out full hits, restricted hits, top hits for everything.
+            full_var_output = current_var.output
+            dist_metrics = current_var.full_dist_metrics
+            for x, y in zip(full_var_output, dist_metrics):
+                all_output.append(x)
+                full_dist_metrics.append(y)
+
+                if x[-1] > d_thresh:
+                    restricted_output.append(x)
+                    restricted_dist_metrics.append(y)
+
+            dist_metrics = current_var.full_dist_metrics
+            for d in dist_metrics:
+                full_dist_metrics.append(d)
+
+        # Rank and get top 100 hits by distance.
+        top_output = sorted(all_output, reverse=True, key=lambda x: float(x[-1]))[0:100]
+
+        # And for the distance metrics.
+        top_idx = [all_output.index(x) for x in top_output]
+        # Use index of top 100 distances in full list to get top distance metrics for those scores as well.
+        top_dist_metrics = [full_dist_metrics[x] for x in top_idx]
+
+        print("Creating output files and plots.")
+
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
+              file=full_out_file)
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
+              file=top_out_file)
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
+              file=rest_out_file)
+
+        # Output to files.
+        for x in all_output:
+            print("\t".join([str(y) for y in x]), file=full_out_file)
+
+        for x in top_output:
+            print("\t".join([str(y) for y in x]), file=top_out_file)
+
+        if d_thresh != 0:  # If distance threshold was provided, restrict output/plots based on that as well.
+            for x in restricted_output:
+                print("\t".join([str(y) for y in x]), file=rest_out_file)
+            rest_out_file.close()
+
+            plot_distances(restricted_dist_metrics, out_prefix + "_restricted")
+
+        full_out_file.close()
+        top_out_file.close()
+
+        # Plotting.
+        plot_distances(full_dist_metrics, out_prefix + "_full")
+        plot_distances(top_dist_metrics, out_prefix + "_top")
 
     print("Complete at: " + timeString() + ".")
 
