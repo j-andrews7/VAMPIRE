@@ -19,14 +19,14 @@ import time
 from math import sqrt
 
 import plotly
-import plotly.plotly as py
 import plotly.graph_objs as go
 
 import numpy as np
 
 from utils import Position, timeString
 
-# YYY-JA 04/24/2017 - Hate making yet another variant of this class. Move to utils.py and make uniform across modules.
+# YYY-JA 04/24/2017 - Hate making yet another variant (Ha) of this class.
+# Move to utils.py and make uniform across modules.
 
 
 class Variant(object):
@@ -393,12 +393,10 @@ def main(vcf_file, out_prefix, d_thresh):
 
         print("Creating output files and plots.")
 
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
               file=full_out_file)
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
               file=top_out_file)
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE",
-              file=rest_out_file)
 
         # Output to files.
         for x in all_output:
@@ -410,6 +408,8 @@ def main(vcf_file, out_prefix, d_thresh):
         if d_thresh != 0:  # If distance threshold was provided, restrict output/plots based on that as well.
             for x in restricted_output:
                 print("\t".join([str(y) for y in x]), file=rest_out_file)
+            print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
+                  file=rest_out_file)
             rest_out_file.close()
 
             plot_distances(restricted_dist_metrics, out_prefix + "_restricted")
