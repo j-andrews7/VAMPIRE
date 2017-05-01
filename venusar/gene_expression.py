@@ -33,7 +33,7 @@ Args:
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import argparse
 import time
-from statistics import mean, stdev
+from statistics import median
 from sequence import read_line2sample_list
 from utils import Position, timeString
 
@@ -185,44 +185,43 @@ class Locus(object):
         self.z_scores[variant] = []
 
     def calc_z_score(self, ref_ind, var_ind, variant, thresh=0):
-        # TODO - Add docstring here.
+        """
+        Calculate a robust z-score for the given gene and variant.
+
+        This uses the median absolute deviation (MAD):
+        https://en.wikipedia.org/wiki/Median_absolute_deviation
+        """
         self.num_valid_ref[variant] = len(ref_ind)
         self.num_valid_var[variant] = len(var_ind)
 
-        if len(ref_ind) > 1:  # If all samples (or all but 1) have the variant, can't calc z-score, return 'NA'.
-            for entry in ref_ind:
-                scores = self.ref_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.ref_scores[variant] = scores
-            for entry in var_ind:
-                scores = self.var_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.var_scores[variant] = scores
+        for entry in ref_ind:
+            scores = self.ref_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.ref_scores[variant] = scores
+        for entry in var_ind:
+            scores = self.var_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.var_scores[variant] = scores
 
-            ref_mean = mean(self.ref_scores[variant])
-            ref_std = stdev(self.ref_scores[variant])
+        # MAD calculation.
+        all_scores = self.ref_scores[variant] + self.var_scores[variant]
+        med = median(all_scores)
+        abs_score = [abs(x - med) for x in all_scores]
+        mad = median(abs_score) * 1.4826
+        # 1.4826 is a constant that assumes a normal distribution to use the MAD as a consistent estimator
+        # of standard deviation.
 
-            if ref_std == 0:  # If only one sample has ref, will have no variance. Should never happen.
-                for i in var_ind:
-                    vals = self.z_scores[variant]
-                    vals.append("NA")
-                    self.z_scores[variant] = vals
-            else:
-                score = [((x - ref_mean) / ref_std) for x in self.var_scores[variant]]
+        robust_z_scores = [((x - med) / mad) for x in self.var_scores[variant]]
 
-                for item in score:
-                    if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
-                        passed = self.num_pass_thresh[variant]
-                        passed += 1
-                        self.num_pass_thresh[variant] = passed
-                    vals = self.z_scores[variant]
-                    vals.append(score)
-                    self.z_scores[variant] = vals
-        else:
-            for i in var_ind:
-                vals = self.z_scores[variant]
-                vals.append("NA")
-                self.z_scores[variant] = vals
+        for item in robust_z_scores:
+            if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
+                passed = self.num_pass_thresh[variant]
+                passed += 1
+                self.num_pass_thresh[variant] = passed
+            vals = self.z_scores[variant]
+            vals.append(robust_z_scores)
+            self.z_scores[variant] = vals
+
         return
 
 
@@ -345,8 +344,8 @@ def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, e
                  'expression data.">\n')
         info += ('##INFO=<ID=EXPV,Number=.,Type=String,Description="Samples with the variant allele and expression '
                  'data.">\n')
-        info += ('##INFO=<ID=EXPVZ,Number=.,Type=String,Description="Z-score for each gene near the variant.'
-                 ' Calculated for each sample containing the variant for each gene.">\n')
+        info += ('##INFO=<ID=EXPVZ,Number=.,Type=String,Description="Robust z-score (MAD) for each gene '
+                 'near the variant. Calculated for each sample containing the variant for each gene.">\n')
         info += ('##INFO=<ID=EXPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets'
                  'the z-score expression magnitude threshold.">\n')
         info += ('##INFO=<ID=EXPNV,Number=1,Type=Integer,Description="Number of samples containing variant'
