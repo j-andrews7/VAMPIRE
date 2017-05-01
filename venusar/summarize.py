@@ -213,7 +213,7 @@ class Variant(object):
             m_score = motif_info[m]  # Motif delta score for var vs ref.
 
             for s in sample_info:
-                dist_metrics = [float(m_score), float(s[2]), float(s[4])]  # To be used for plotting later.
+                dist_metrics = [(float(m_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
                 dist_score = calc_distance(dist_metrics)
                 dist_metric_lists.append(dist_metrics)
                 # Create complete list of output fields.
@@ -270,8 +270,6 @@ def plot_distances(score_array, out_prefix):
     """
 
     x, y, z = np.array(score_array).transpose()
-    print(score_array[0])
-    print(x[0], y[0], z[0], sep="\t")
 
     trace1 = go.Scatter3d(
         name="Distances",
@@ -298,7 +296,7 @@ def plot_distances(score_array, out_prefix):
         title='Distances from Average for Individual Variant Events',
         scene=dict(
             xaxis=dict(
-                title='log2 Var/Ref Motif Log-Odds Ratio Difference',
+                title='Var/Ref Motif Log-Odds Ratio Difference',
                 titlefont=dict(
                     family='Courier New, monospace',
                     size=18,
@@ -346,6 +344,7 @@ def main(vcf_file, out_prefix, d_thresh):
         command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
                    ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
         print(command)
+        print("Processing...")
 
         full_out_file = open(out_prefix + "_full.txt", "w")  # Full output.
         top_out_file = open(out_prefix + "_top100.txt", "w")  # Top 100 hits.
@@ -371,6 +370,7 @@ def main(vcf_file, out_prefix, d_thresh):
             # Piece out full hits, restricted hits, top hits for everything.
             full_var_output = current_var.output
             dist_metrics = current_var.full_dist_metrics
+
             for x, y in zip(full_var_output, dist_metrics):
                 all_output.append(x)
                 full_dist_metrics.append(y)
@@ -379,23 +379,37 @@ def main(vcf_file, out_prefix, d_thresh):
                     restricted_output.append(x)
                     restricted_dist_metrics.append(y)
 
-            dist_metrics = current_var.full_dist_metrics
-            for d in dist_metrics:
-                full_dist_metrics.append(d)
-
         # Rank and get top 100 hits by distance.
         top_output = sorted(all_output, reverse=True, key=lambda x: float(x[-1]))[0:100]
-
         # And for the distance metrics.
         top_idx = [all_output.index(x) for x in top_output]
         # Use index of top 100 distances in full list to get top distance metrics for those scores as well.
         top_dist_metrics = [full_dist_metrics[x] for x in top_idx]
 
+        # Can really only plot ~30000 points at a time, so grab top 30k hits for each set.
+        if len(all_output) > 30000:
+            top30k_all_output = sorted(all_output, reverse=True, key=lambda x: float(x[-1]))[0:30000]
+            top30k_all_idx = [all_output.index(x) for x in top30k_all_output]
+            top30k_all_dist_metrics = [full_dist_metrics[x] for x in top30k_all_idx]
+        else:
+            top30k_all_output = sorted(all_output, reverse=True, key=lambda x: float(x[-1]))
+            top30k_all_idx = [all_output.index(x) for x in top30k_all_output]
+            top30k_all_dist_metrics = [full_dist_metrics[x] for x in top30k_all_idx]
+
+        if len(restricted_output) > 30000:
+            top30k_rest_output = sorted(restricted_output, reverse=True, key=lambda x: float(x[-1]))[0:30000]
+            top30k_rest_idx = [restricted_output.index(x) for x in top30k_rest_output]
+            top30k_rest_dist_metrics = [restricted_dist_metrics[x] for x in top30k_rest_idx]
+        else:
+            top30k_rest_output = sorted(restricted_output, reverse=True, key=lambda x: float(x[-1]))
+            top30k_rest_idx = [restricted_output.index(x) for x in top30k_rest_output]
+            top30k_rest_dist_metrics = [restricted_dist_metrics[x] for x in top30k_rest_idx]
+
         print("Creating output files and plots.")
 
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
               file=full_out_file)
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
+        print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
               file=top_out_file)
 
         # Output to files.
@@ -408,20 +422,21 @@ def main(vcf_file, out_prefix, d_thresh):
         if d_thresh != 0:  # If distance threshold was provided, restrict output/plots based on that as well.
             for x in restricted_output:
                 print("\t".join([str(y) for y in x]), file=rest_out_file)
-            print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
+            print("CHR\tPOS\tREF\tALT\tMOTIF\tVAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
                   file=rest_out_file)
             rest_out_file.close()
 
-            plot_distances(restricted_dist_metrics, out_prefix + "_restricted")
+            plot_distances(top30k_rest_dist_metrics, out_prefix + "_restricted")
 
         full_out_file.close()
         top_out_file.close()
 
         # Plotting.
-        plot_distances(full_dist_metrics, out_prefix + "_full")
+        plot_distances(top30k_all_dist_metrics, out_prefix + "_full")
         plot_distances(top_dist_metrics, out_prefix + "_top")
 
     print("Complete at: " + timeString() + ".")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)
