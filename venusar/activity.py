@@ -2,8 +2,8 @@
 """
 For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and some
 value for each loci for each sample, find loci that overlap a variant and compare the value of samples with the variant
-to those without the variant. Report z-scores for each loci overlapped in an output VCF and report the variants for
-each loci in a bed-like, loci-centric output file as well.
+to those without the variant. Report robut z-scores for each loci overlapped in an output VCF and report the variants
+for each loci in a bed-like, loci-centric output file as well.
 
 Usage: activity.py -i <input.vcf> -a <activity.bed> -ov <output.vcf> -ob <output.bed> [OPTIONS]
 
@@ -17,7 +17,7 @@ Args:
     -fan (int, optional): Set number of samples that must meet z-score threshold for a locus to be reported to
         bed output file. So this number of samples must have the variant and have the locus's activity be significantly
         affected by it. Default is 0, so a locus will be reported if its activity is altered in even one sample above
-        the z-score threshold.
+        the robust z-score threshold.
     -ib (bool, optional): Should loci that don't contain any variants that significantly affect their activity
         be included in the bed output? False by default, set to True if wanted.
     -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
