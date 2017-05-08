@@ -51,6 +51,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv):
     find_thresh = robjects.r('''
         function(mat, pvalue, bg) {
             require('TFMPvalue')
+            rownames(mat, do.NULL = TRUE, prefix = "row")
             rownames(mat) <- c("A","C","G","T")
             mat
             TFMpv2sc(mat, pvalue, bg, type="PWM")
