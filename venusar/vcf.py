@@ -10,6 +10,7 @@ intended to be imported and used by other code in venusar package
 """
 
 import sequence
+import pandas as pd
 
 
 def read_vcf_data(vcf_file, samples_as_dictionary=False):
@@ -118,6 +119,98 @@ def read_vcf_variant_lines(file_handle, verbose_flag=False):
 
     return (variant_set)
 
+
+def read_vcf_data_to_pandas(vcf_file, samples_as_dictionary=False):
+    """
+    XXX: just use: https://gist.github.com/slowkow/6215557 ???
+    Read vcf file, return samples from header and list of pandas data frames
+    2 for motifs (var, ref)
+
+    Args:
+        vcf_file (str): valid vcf file location
+        samples_as_dictionary (boolean, False): if True return samples as list
+            if false return a list of 2 dictionaries: (samplesByName, samplesByIndex)
+            True: calls sequence.read_line2sample_list
+            False: calls sequence.read_line2sample_dictionaries
+    Returns:
+        vcf_pandas = list of pandas dataframes of the vcf data
+        samples (list): type modified by samples_as_dictionary boolean
+    """
+
+    vcf_samples = []
+    vcf_motifs = []    # list of dictionaries, 1 for each vcf line
+
+    bad_file = False
+    reading_header = True
+    # Open and Read VCF file: populates SequenceArray, assumes set fits in memory
+    with open(vcf_file) as vcf_handle:
+
+        line = vcf_handle.readline().strip()
+
+        if reading_header:
+            # Skip info lines
+            while line.startswith("##"):
+                line = vcf_handle.readline()
+
+            # Parse VCF sample header line to get samples present in file.
+            if line.startswith("#"):
+                line = line.strip()
+                if samples_as_dictionary:
+                    #(samplesByName, samplesByIndex) = sequence.read_line2sample_dictionaries(line)
+                    vcf_samples = sequence.read_line2sample_dictionaries(line)
+                else:
+                    vcf_samples = sequence.read_line2sample_list(line)
+                reading_header = False
+            else:
+                print(("ERROR: read_vcf_data_motifs_to_pandas(): Early Exit due to Incorrect file format.\n\tFile(" +
+                    format(vcf_file) + ") does not have # line following ##info lines."))
+                bad_file = True    # flag to not process rest of the file; effectively returns
+                reading_header = False
+
+        for line in f:
+            if bad_file:
+                break
+            # skip empty, information, and comment lines
+            if line.startswith("#"):
+                continue
+
+            line = line.strip()
+
+            # skip empty lines (after removing arbitrary whitespace characters)
+            if line == "":
+                continue
+
+            # -- process valid variant lines
+            line_list = line.split("\t")
+
+            # - create variant sequence element; same as read_vcf_variant_lines
+            # variant creation: add_seq_defined(chromosome, position, reference_seq, variant_seq):
+            # variant_set.add_seq_defined(line_list[0], int(line_list[1]), line_list[3], line_list[4])
+            new_sequence_element = sequence.SequenceElement()
+            new_sequence_element.assign(line_list[0], int(line_list[1]), line_list[3], line_list[4])
+            # grab samples for variant
+            new_sequence_element.assign_samples(line_list[9:])
+            # push full line (memory hog, but allows multivar computation
+            #    w/o significant code manipulation to track which line is current
+            #    already processed, etc.)
+            new_sequence_element.vcf_line = line
+
+            ## variant_set.add_seq(new_sequence_element)
+
+            # - read in motif elements to expanding dictionary
+
+            ## motif_dict = {}    # dictionary key = motif TF name, value = (var,ref) score
+            # 7th index, break on ; search for MOTIFN, MOTIFV, and MOTIFR
+
+            # append to vcf_motifs
+            vcf_motifs.append()
+
+            # XXX incomplete!!!
+            #Frame = Frame.append(pandas.DataFrame(data = SomeNewLineOfData), ignore_index=True)
+
+    vcf_pandas = list(pd)
+
+    return (vcf_pandas, vcf_samples)
 
 # XXX add code to read MOTIF Scores from the 7th tab separated element; see update_vcf_motifs_info
 # QQQ is the motifs.py print_peak code ever hit? check output
