@@ -106,6 +106,51 @@ class MotifArray:
         """return length of the set of motifs for the array"""
         return (len(self.motifs))
 
+    def motif_count(self, valid_only):
+        """
+        For the motif array object return the dictionary of unique motif names
+        and corresponding counts. Key = name, index = count
+
+        Args:
+            valid_only = boolean if true the count ignores invalid motifElement()s
+
+        Returns: Dictionary of unique motif names with occurence counts
+        """
+        motifSet = {}
+
+        for motif_index in range(len(self.motifs)):
+            if valid_only and not self.motifs[motif_index].valid_flag:
+                continue
+            if self.motifs[motif_index].name in motifSet:
+                motifSet[self.motifs[motif_index].name] = motifSet[self.motifs[motif_index].name] + 1
+            else:
+                motifSet[self.motifs[motif_index].name] = 1
+
+        return (motifSet)
+
+    def motif_lengths(self, valid_only):
+        """
+        For the motif array object return two lists about motifElement()s in MotifArray() object
+
+        Args:
+            valid_only = boolean if true the count ignores invalid motifElement()s
+
+        Returns:
+            MotifElement() object names list
+            MotifElement() object length list
+
+        """
+        listNames = []
+        listLengths = []
+
+        for motif_index in range(len(self.motifs)):
+            if valid_only and not self.motifs[motif_index].valid_flag:
+                continue
+            listNames.append(self.motifs[motif_index].name)
+            listLengths.append(self.motifs[motif_index].positions)
+
+        return (listNames, listLengths)
+
     def motif_match(self, baseline_p, ref_seq, var_seq, wing_l):
         """
         Takes a reference and variant sequence string, then checks for matches
