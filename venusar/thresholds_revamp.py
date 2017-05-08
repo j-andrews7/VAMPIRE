@@ -44,7 +44,7 @@ from utils import timeString
 def main(motif_file, motif_outfile, pc, bp, ow, pv):
     thresholds = []
     background = {'A': bp[0], 'C': bp[1], 'G': bp[2], 'T': bp[3]}
-    r_background = robjects.ListVector({'A': bp[0], 'C': bp[1], 'G': bp[2], 'T': bp[3]})
+    r_background = robjects.FloatVector((bp[0], bp[1], bp[2], bp[3]))
     print(("Baseline nucleotide frequencies:\n\t" + str(background)))
     print(("Calculating thresholds (" + timeString() + "). This should only take a few minutes."))
 
@@ -53,7 +53,8 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv):
             require('TFMPvalue')
             rownames(mat, do.NULL = TRUE, prefix = "row")
             rownames(mat) <- c("A","C","G","T")
-            mat
+            bg <- c(A=bg[1], C=bg[2], G=bg[3], T=bg[4])
+            print(mat)
             TFMpv2sc(mat, pvalue, bg, type="PWM")
         }
         ''')
@@ -71,7 +72,8 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv):
                                 nrow=4)
 
         thresh = find_thresh(mat, pv, r_background)
-        thresholds.append(thresh.split())
+        print(thresh)
+        thresholds.append(thresh[0])
 
     print(("Total motifs read: " + str(len(thresholds))))
     print("Writing output file.")
