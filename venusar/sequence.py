@@ -814,10 +814,10 @@ def get_surrounding_seq(chromo, var_pos, ref_l, wing_l, fas):
     #   or      1 indexed and min (first) base isn't returned
     # fas returns a 'sequence' object, converted by a string for return
     print(("pulling reference sequence for (" + chromo + ", " +
-        format(var_pos) + ", " + format(ref_l) + ", " + format(wing_l) + ", " +
-        format(fas) + ")\n\t" +
-        format(var_pos - wing_l) + ":" + format(var_pos + wing_l + ref_l)
-        ))
+           format(var_pos) + ", " + format(ref_l) + ", " + format(wing_l) + ", " +
+           format(fas) + ")\n\t" +
+           format(var_pos - wing_l) + ":" + format(var_pos + wing_l + ref_l)
+           ))
     #  fas is 0 indexed ie var_pos - 1 to get correct value for var_pos
     #     so var_pos - 0 - 1 returns the value at var_pos in the fasta sequence
     #     do not print with -1 above to avoid confusing the user
@@ -952,4 +952,3 @@ def sub_from_start(sequence_string, return_length):
         return sequence_string
 
     return sequence_string[:return_length]
-

@@ -16,6 +16,7 @@ Args:
 """
 import argparse
 import time
+import pandas as pd
 from math import sqrt
 
 import plotly
@@ -48,7 +49,7 @@ class Variant(object):
         self.motif_scores = self.get_motif_scores()  # Calculate delta motif scores and place into a dict.
         self.sample_data = self.get_sample_data()  # Parse all combos of gene expression and loci activity data.
 
-        self.output, self.full_dist_metrics = self.get_variant_summary()  # Get output lines as a list of lists.
+        self.output = self.get_variant_summary()  # Get output lines as a list of lists.
 
         if self.common_samples is not None:  # Should never evaluate to False.
             self.num_com_samps = len(self.common_samples)
@@ -200,27 +201,24 @@ class Variant(object):
 
         Returns:
             output_fields (list of lists of str): List of lists of output fields for the Variant.
-            dist_metric_lists (list of lists of floats): List of lists of floats containing [x,y,z] dist metrics.
         """
         var_info = [self.pos.chrom, self.pos.start, self.ref_allele, self.var_allele]
         motif_info = self.motif_scores
         sample_info = self.sample_data
 
         output_fields = []
-        dist_metric_lists = []
 
         for m in motif_info:
             m_score = motif_info[m]  # Motif delta score for var vs ref.
 
             for s in sample_info:
-                dist_metrics = [float(m_score), float(s[2]), float(s[4])]  # To be used for plotting later.
+                dist_metrics = [(float(m_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
                 dist_score = calc_distance(dist_metrics)
-                dist_metric_lists.append(dist_metrics)
                 # Create complete list of output fields.
                 output_fields.append(var_info + [m] + [m_score] + [s[0]] + [s[1]] + [s[2]] + [s[3]] +
                                      [s[4]] + [dist_score])
 
-        return (output_fields, dist_metric_lists)
+        return (output_fields)
 
 
 def compare_samples(exp_samples, act_samples):
@@ -258,30 +256,34 @@ def calc_distance(score_array):
     return sqrt((score_array[0] ** 2) + (score_array[1] ** 2) + (score_array[2] ** 2))
 
 
-def plot_distances(score_array, out_prefix):
+def plot_distances(df, out_prefix):
     """
     Plot distance scores calculated for the delta var/ref motif log-odds ratios, activity z-score, and gene expression
     z-score sets for each variant.
 
     Args:
-        score_array (numpy array) = Array containing all delta var/ref log-odds ratio, activity z-score, and gene
-            expression z-score sets for each variant.
+        df (pandas Dataframe) = Dataframe containing all variant, distance metric, and sample info. One record per row.
         out_prefix (str) = Prefix to use for plot outputs.
     """
 
-    x, y, z = np.array(score_array).transpose()
-    print(score_array[0])
-    print(x[0], y[0], z[0], sep="\t")
+    # Take top 30k hits only, plotly handle really handle more for 3D plots.
+    if len(df) > 30000:
+        df = df.head(30000)
+
+    info = list(zip(df.SAMPLE, df.MOTIF, df.GENE))
+    info_list = ["Sample: " + x[0] + ", Motif: " + x[1] + ", Gene: " + x[2] for x in info]
 
     trace1 = go.Scatter3d(
         name="Distances",
-        x=x,
-        y=y,
-        z=z,
+        x=df['VAR-REF_SCORE'],
+        y=df.ACT_ZSCORE,
+        z=df.EXP_ZSCORE,
+        hoverinfo="x+y+z+text",
+        text=info_list,
         mode='markers',
         marker=dict(
             size=4,                 # Using gene expression as color scale values for now.
-            color=z,                # set color to an array/list of desired values
+            color=df.SCALED_DISTANCE,                # set color to an array/list of desired values
             colorscale='Viridis',   # choose a colorscale
             opacity=0.8
         )
@@ -293,12 +295,12 @@ def plot_distances(score_array, out_prefix):
             l=0,
             r=0,
             b=0,
-            t=0
+            t=100
         ),
         title='Distances from Average for Individual Variant Events',
         scene=dict(
             xaxis=dict(
-                title='log2 Var/Ref Motif Log-Odds Ratio Difference',
+                title='Var/Ref Motif Log-Odds Ratio Difference',
                 titlefont=dict(
                     family='Courier New, monospace',
                     size=18,
@@ -329,6 +331,42 @@ def plot_distances(score_array, out_prefix):
     plotly.offline.plot(fig, filename=out_prefix + '.html', auto_open=False, image="png", image_filename=out_prefix)
 
 
+def scale_and_frame(all_output):
+    """
+    Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
+    metric, summation, and taking square root. Make things much easier to plot and handle.
+
+    Args:
+        all_output (list of lists): Each list contains a set of motif, expression, activity data.
+            [sample, loci1, sample act_z_score, gene1, sample exp_z_score, distance]
+
+    Returns:
+        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
+            [sample, loci1, sample act_z_score, gene1, sample exp_z_score, distance, scaled_distance]
+    """
+
+    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR-REF_SCORE', 'SAMPLE', 'LOCIID',
+                                           'ACT_ZSCORE', 'GENE', 'EXP_ZSCORE', 'DISTANCE'])
+    df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE',
+                                                                        'DISTANCE']].apply(pd.to_numeric)
+    print(df.head(10))
+
+    # Get scaling factors.
+    motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
+    act_score_scale = max(df.ACT_ZSCORE ** 2)
+    gene_score_scale = max(df.EXP_ZSCORE ** 2)
+
+    # Scale the distance and create new column.
+    df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                    ((df.ACT_ZSCORE ** 2) / act_score_scale) +
+                                    ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+
+    # Sort by distance.
+    df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+
+    return df
+
+
 def main(vcf_file, out_prefix, d_thresh):
     """
 
@@ -354,74 +392,43 @@ def main(vcf_file, out_prefix, d_thresh):
             rest_out_file = open(out_prefix + "_restricted.txt", "w")  # Restricted by distance threshold.
 
         all_output = []
-        restricted_output = []
-        top_output = []
-
-        full_dist_metrics = []  # Hold all dist metrics.
-        restricted_dist_metrics = []  # Hold only those that meet the distance threshold.
-        top_dist_metrics = []  # Hold top 100 greatest distances.
 
         # Print new info lines at the top of the ##INFO section.
         while line.startswith("#"):
             line = f.readline().strip()
 
+        print("Reading and processing input file.")
         for line in f:
             current_var = Variant(line)  # Most processing happening here.
 
             # Piece out full hits, restricted hits, top hits for everything.
             full_var_output = current_var.output
-            dist_metrics = current_var.full_dist_metrics
-            for x, y in zip(full_var_output, dist_metrics):
+
+            for x in full_var_output:
                 all_output.append(x)
-                full_dist_metrics.append(y)
 
-                if x[-1] > d_thresh:
-                    restricted_output.append(x)
-                    restricted_dist_metrics.append(y)
-
-            dist_metrics = current_var.full_dist_metrics
-            for d in dist_metrics:
-                full_dist_metrics.append(d)
-
-        # Rank and get top 100 hits by distance.
-        top_output = sorted(all_output, reverse=True, key=lambda x: float(x[-1]))[0:100]
-
-        # And for the distance metrics.
-        top_idx = [all_output.index(x) for x in top_output]
-        # Use index of top 100 distances in full list to get top distance metrics for those scores as well.
-        top_dist_metrics = [full_dist_metrics[x] for x in top_idx]
+        # Scale distance metrics.
+        print("Calculating distance metrics.")
+        scaled_df = scale_and_frame(all_output)
 
         print("Creating output files and plots.")
+        scaled_df.to_csv(rest_out_file, sep="\t", index=False)
 
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
-              file=full_out_file)
-        print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
-              file=top_out_file)
+        if d_thresh != 0:
+            restricted_scaled_df = scaled_df[scaled_df.SCALED_DISTANCE > d_thresh]
+            restricted_scaled_df.to_csv(full_out_file, sep="\t", index=False)
+            plot_distances(restricted_scaled_df, out_prefix + "_restricted")
 
-        # Output to files.
-        for x in all_output:
-            print("\t".join([str(y) for y in x]), file=full_out_file)
+        # Get top 100 hits by distance.
+        top100_df = scaled_df.head(100)
+        top100_df.to_csv(top_out_file, sep="\t", index=False)
 
-        for x in top_output:
-            print("\t".join([str(y) for y in x]), file=top_out_file)
-
-        if d_thresh != 0:  # If distance threshold was provided, restrict output/plots based on that as well.
-            for x in restricted_output:
-                print("\t".join([str(y) for y in x]), file=rest_out_file)
-            print("CHR\tPOS\tREF\tALT\tMOTIF\tLOG2_VAR-REF_SCORE\tSAMPLE\tLOCIID\tACT_ZSCORE\tGENE\tEXP_ZSCORE\tDISTANCE",
-                  file=rest_out_file)
-            rest_out_file.close()
-
-            plot_distances(restricted_dist_metrics, out_prefix + "_restricted")
-
-        full_out_file.close()
-        top_out_file.close()
-
-        # Plotting.
-        plot_distances(full_dist_metrics, out_prefix + "_full")
-        plot_distances(top_dist_metrics, out_prefix + "_top")
+        # Plotting - only plots top 30k hits as browsers can't handle more.
+        plot_distances(scaled_df, out_prefix + "_full")
+        plot_distances(top100_df, out_prefix + "_top")
 
     print("Complete at: " + timeString() + ".")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)

@@ -2,8 +2,8 @@
 """
 For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and some
 value for each loci for each sample, find loci that overlap a variant and compare the value of samples with the variant
-to those without the variant. Report z-scores for each loci overlapped in an output VCF and report the variants for
-each loci in a bed-like, loci-centric output file as well.
+to those without the variant. Report robut z-scores for each loci overlapped in an output VCF and report the variants
+for each loci in a bed-like, loci-centric output file as well.
 
 Usage: activity.py -i <input.vcf> -a <activity.bed> -ov <output.vcf> -ob <output.bed> [OPTIONS]
 
@@ -17,7 +17,7 @@ Args:
     -fan (int, optional): Set number of samples that must meet z-score threshold for a locus to be reported to
         bed output file. So this number of samples must have the variant and have the locus's activity be significantly
         affected by it. Default is 0, so a locus will be reported if its activity is altered in even one sample above
-        the z-score threshold.
+        the robust z-score threshold.
     -ib (bool, optional): Should loci that don't contain any variants that significantly affect their activity
         be included in the bed output? False by default, set to True if wanted.
     -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
@@ -27,7 +27,7 @@ Args:
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import argparse
 import time
-from statistics import mean, stdev
+from statistics import median
 from sequence import read_line2sample_list
 from utils import Position, timeString
 
@@ -180,43 +180,43 @@ class Locus(object):
         self.z_scores[variant] = []
 
     def calc_z_score(self, ref_ind, var_ind, variant, thresh=0):
-        # TODO - Add docstring here.
+        """
+        Calculate a robust z-score for the given locus and variant.
+
+        This uses the median absolute deviation (MAD):
+        https://en.wikipedia.org/wiki/Median_absolute_deviation
+        """
         self.num_valid_ref[variant] = len(ref_ind)
         self.num_valid_var[variant] = len(var_ind)
 
-        if len(ref_ind) > 1:  # If all samples (or all but 1) have the variant, can't calc z-score, return 'NA'.
-            for entry in ref_ind:
-                scores = self.ref_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.ref_scores[variant] = scores
-            for entry in var_ind:
-                scores = self.var_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.var_scores[variant] = scores
+        for entry in ref_ind:
+            scores = self.ref_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.ref_scores[variant] = scores
+        for entry in var_ind:
+            scores = self.var_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.var_scores[variant] = scores
 
-            ref_mean = mean(self.ref_scores[variant])
-            ref_std = stdev(self.ref_scores[variant])
+        # MAD calculation.
+        all_scores = self.ref_scores[variant] + self.var_scores[variant]
+        med = median(all_scores)
+        abs_score = [abs(x - med) for x in all_scores]
+        mad = median(abs_score) * 1.4826
+        # 1.4826 is a constant that assumes a normal distribution to use the MAD as a consistent estimator
+        # of standard deviation.
 
-            if ref_std == 0:  # If only one sample has ref, will have no variance. Should never happen.
-                for i in var_ind:
-                    vals = self.z_scores[variant]
-                    vals.append("NA")
-                    self.z_scores[variant] = vals
-            else:
-                score = [((x - ref_mean) / ref_std) for x in self.var_scores[variant]]
-                for item in score:
-                    if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
-                        passed = self.num_pass_thresh[variant]
-                        passed += 1
-                        self.num_pass_thresh[variant] = passed
-                    vals = self.z_scores[variant]
-                    vals.append(score)
-                    self.z_scores[variant] = vals
-        else:
-            for i in var_ind:
-                vals = self.z_scores[variant]
-                vals.append("NA")
-                self.z_scores[variant] = vals
+        robust_z_scores = [((x - med) / mad) for x in self.var_scores[variant]]
+
+        for item in robust_z_scores:
+            if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
+                passed = self.num_pass_thresh[variant]
+                passed += 1
+                self.num_pass_thresh[variant] = passed
+            vals = self.z_scores[variant]
+            vals.append(robust_z_scores)
+            self.z_scores[variant] = vals
+
         return
 
     def get_locus_output(self, include_bed=False, filter_num=0):
@@ -390,7 +390,7 @@ def reduce_activity_names(act_samps, split_string="_"):
         else:
             split_two.append(split_string.join(splitList[1:]))
 
-    #3. determine the unique set size (just making it a set makes them unique
+    # 3. determine the unique set size (just making it a set makes them unique
     s1 = set(split_one)
     s2 = set(split_two)
 
@@ -414,7 +414,8 @@ def reduce_activity_names(act_samps, split_string="_"):
         return (act_samps_rebuild)
 
 
-def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False, drop_act_=1):
+def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False,
+         drop_act_=1):
     """
     Compare activity of loci for samples harboring a variant within a given locus to those samples that do not.
 
@@ -464,8 +465,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
                  '.">\n')
         info += ('##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples with the variant allele and loci data.'
                  '">\n')
-        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.'
-                 ' Calculated for each sample containing the variant for each loci.">\n')
+        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Robust z-score for each loci '
+                 'containing the variant. Calculated for each sample containing the variant for each loci.">\n')
         info += ('##INFO=<ID=SAMPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets'
                  'the z-score magnitude threshold.">\n')
         info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant'
