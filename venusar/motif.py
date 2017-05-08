@@ -13,7 +13,6 @@ import sequence    # need sub_from_*, crop_from_*
 from math import log2
 import numpy as np
 
-
 class MotifArray:
     """this class is the array of motif Elements"""
 
@@ -1254,7 +1253,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
     return motif_set
 
 
-def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
+def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     """
     Read in motif file, modify defined thresholds in place and output updated file
     Based on thresholds.py::output_motifs.
@@ -1263,14 +1262,9 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     Args:
         input_f (str): Name of file containing frequency matrices for each motif.
         output_f (str): Name of output file.
-        default_th (float): Default threshold value used if the calculated
-            threshold is lower than this value.
-            This value may be None.
-            Ex: for default_th = 0.0, if biopython calculates threshold needed for
-            a given false positive rate as -1.23, threshold printed will be 0.0.
         overwrite (bool): True if thresholds already in the file should be replaced.
         thresholds_list (list): List of thresholds (floats);
-            for thresholds.py calls, thresholds list is calculated by biopython.
+            for thresholds.py calls, thresholds list is calculated by TFM-PVALUE.
             thresholds_list must be the same length as the number of motifs read in
 
     See Also: thresholds.py
@@ -1309,8 +1303,8 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
                 # determine what threshold to put
                 if not overwrite and given_thresh is not None:
                     line[2] = str(given_thresh)
-                elif default_th is not None and default_th > thresholds_list[idx]:
-                    line[2] = str(default_th)
+                #elif default_th is not None and default_th > thresholds_list[idx]:
+                    #line[2] = str(default_th)
                 else:
                     line[2] = str(thresholds_list[idx])
                 # print the updated line
