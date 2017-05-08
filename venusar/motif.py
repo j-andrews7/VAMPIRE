@@ -7,11 +7,13 @@ intended to be imported with motifs.py and other for related functionality
 """
 
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
-import sequence    # need sub_from_*, crop_from_*
-                   # (maybe later need int func and split wing/core processing)
-                   # then would want base sequence object
+import sequence
+# need sub_from_*, crop_from_*
+# (maybe later need int func and split wing/core processing)
+# then would want base sequence object
 from math import log2
 import numpy as np
+
 
 class MotifArray:
     """this class is the array of motif Elements"""
@@ -141,9 +143,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -195,9 +197,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -324,9 +326,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -367,7 +369,7 @@ class MotifArray:
         scores = []
 
         for motif_index in range(len(self.motifs)):
-            #### (iden, name, thresh, p_matrix) = tup
+            # (iden, name, thresh, p_matrix) = tup
             motif_element = self.motifs[motif_index]
 
             # -- prepare the motif element and sequence string for scoring
@@ -378,7 +380,7 @@ class MotifArray:
                 # need to calculate base occurence frequency by position. why
                 # didn't it do this during insertion? will call many times here
                 print("motif_scores: probabilities not previously calculated for " +
-                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                      motif_element.print_str + ". Likely slower to calculate here. Fix")
                 motif_element.calculate_probabilities()
 
             # trim flanking bases to one less than motif length
@@ -527,7 +529,7 @@ class MotifArray:
         scores = []
 
         for motif_index in range(len(self.motifs)):
-            #### (iden, name, thresh, p_matrix) = tup
+            # (iden, name, thresh, p_matrix) = tup
             motif_element = self.motifs[motif_index]
 
             # -- prepare the motif element and sequence string for scoring
@@ -538,7 +540,7 @@ class MotifArray:
                 # need to calculate base occurence frequency by position. why
                 # didn't it do this during insertion? will call many times here
                 print("motif_scores: probabilities not previously calculated for " +
-                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                      motif_element.print_str + ". Likely slower to calculate here. Fix")
                 motif_element.calculate_probabilities()
 
             # trim flanking bases to one less than motif length

@@ -24,7 +24,7 @@ Args:
 """
 import sys
 import argparse
-import time
+
 import motif
 
 
@@ -189,7 +189,7 @@ def get_genes(exp_file, samples, threshold, max_only):
     data_cols = []
     gene_dict = {}
 
-    print('start read exp_file:' + format(exp_file))
+    print('Reading expression file:' + format(exp_file))
 
     if max_only:
         # read and only return max exp value in gene_dict
@@ -277,7 +277,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
                 sys.exit()
 
             print("Filtering motif info for TFs that don't meet the expression threshold of " +
-                str(th) + ". Found " + format(len(gene_dict)) + " genes. Start processing vcf file.")
+                  str(th) + ". Found " + format(len(gene_dict)) + " genes. Start processing vcf file.")
             for line in vcf:
                 new_line = process_line(line, gene_dict, th)
                 if new_line is not None:
@@ -310,7 +310,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
             sys.exit()
 
         print("Filtering motif info for TFs that don't meet the expression threshold of " +
-            str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
+              str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
 
         motif.get_filterbygene_put_motifs(motif_file, motifout_file, th, gene_dict)
 
