@@ -37,7 +37,7 @@ import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 
 from motif import get_put_motifs
-import utils
+from utils import timeString, check_r_install
 
 
 def main(motif_file, motif_outfile, pc, bp, ow, pv):
@@ -45,7 +45,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv):
     background = {'A': bp[0], 'C': bp[1], 'G': bp[2], 'T': bp[3]}
     r_background = robjects.FloatVector((bp[0], bp[1], bp[2], bp[3]))
     print(("Baseline nucleotide frequencies:\n\t" + str(background)))
-    print(("Calculating thresholds (" + utils.timeString() + "). This should only take a few minutes."))
+    print(("Calculating thresholds (" + timeString() + "). This should only take a few minutes."))
 
     find_thresh = robjects.r('''
         function(mat, pvalue, bg) {
@@ -74,12 +74,12 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv):
     print(("Total motifs read: " + str(len(thresholds))))
     print("Writing output file.")
     get_put_motifs(motif_file, motif_outfile, ow, thresholds)
-    print(("Done (" + utils.timeString() + ")"))
+    print(("Done (" + timeString() + ")"))
 
 
 if __name__ == '__main__':
     # Check if TFMPvalues package is installed, attempt to install if necessary.
-    utils.check_r_install('TFMPvalue')
+    check_r_install('TFMPvalue')
     TFMPvalues = importr('TFMPvalue')
     parser = argparse.ArgumentParser(usage=__doc__)
 
