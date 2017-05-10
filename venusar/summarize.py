@@ -30,12 +30,18 @@ Args:
     -pc (float, optional) <0.1>:
         Pseudocounts value to be added to all positions of the motif frequency matrix before calculating
         the probability matrix.
+    -p (int, optional) <1>:
+        Processor cores to utilize. Will decrease computation time linearly.
 """
 import argparse
 import sys
 import time
 from math import sqrt
 from math import log10
+from multiprocessing.dummy import Pool as ThreadPool
+import itertools
+from timeit import default_timer as timer
+import gc
 
 from Bio import motifs
 import pandas as pd
@@ -43,7 +49,7 @@ import plotly
 import plotly.graph_objs as go
 import numpy as np
 import readline  # Often necessary for rpy2 to work properly.
-import rpy2.robjects as robjects
+import rpy2.robjects as R
 from rpy2.robjects.packages import importr
 
 import utils
@@ -429,7 +435,40 @@ def get_pwms(motifs_file, background, pc=0.1):
     return pwms
 
 
-def calc_pvals(df, background, matrices):
+def find_pval(r_func, matrices, m_score, r_bg):
+    """
+    Utilize the given R function to calculate the detection thresholds for each pwm matrix given
+    the nucleotide background frequencies and score.
+
+    Args:
+        r_func (R function):
+            The R function that will be used to actually calculate the threshold using a matrix,
+            p-value, and background nucleotide frequencies.
+        matrices (dict of R matrix):
+            Dict of PWMs corresponding to each motif. {motif name: R PWM}
+        m_score (tuple):
+            Tuple of (score, motif).
+        r_bg (R FloatVector):
+            Vector containing background nucleotide frequencies [A, C, G, T]
+    """
+    score = m_score[0]
+    motif = m_score[1]
+    matrix = matrices[motif]
+
+    start = timer()
+    pval = r_func(matrix, score, r_bg)
+    end = timer()
+
+    print(motif + ": " + str(end - start))
+
+    # Attempt to free memory by running R and python garbage collectors. This was an issue.
+    R.r("gc()")
+    gc.collect()
+
+    return -log10(pval)
+
+
+def get_pvals(df, background, matrices, proc):
     """
     Utilize the TFMPvalue R package to calculate p-values for both the variant and reference scores for a given
     variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
@@ -441,15 +480,16 @@ def calc_pvals(df, background, matrices):
             A, C, T, and G background frequencies.
         matrices (dict of R matrices):
             {motif name: R pwm matrix}
+        proc (int):
+            Processor cores to be used.
 
     Return:
         df (pandas DataFrame):
             Updated DataFrame with p-values.
     """
     # Define R function to use.
-    find_pval = robjects.r('''
+    calc_pval = R.r('''
         function(mat, score, bg) {
-            require('TFMPvalue')
             rownames(mat, do.NULL = TRUE, prefix = "row")
             rownames(mat) <- c("A","C","G","T")
             bg <- c(A=bg[1], C=bg[2], G=bg[3], T=bg[4])
@@ -457,10 +497,17 @@ def calc_pvals(df, background, matrices):
         }
         ''')
 
+    ref_scores = [x for x in zip(df.REF_SCORE, df.MOTIF)]
+    var_scores = [x for x in zip(df.VAR_SCORE, df.MOTIF)]
+
+    with ThreadPool(proc) as pool:
+        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), matrices, var_scores,
+                                  itertools.repeat(background)))
+        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), matrices, ref_scores,
+                                  itertools.repeat(background)))
+
     # Insert columns for p-values.
-    var_pvals = [-log10(find_pval(matrices[x], x, background)[0]) for x in df.VAR_SCORE]
     df.insert(6, '-LOG10(VAR_PVAL)', var_pvals)
-    ref_pvals = [-log10(find_pval(matrices[y], x, background)[0]) for x, y in zip(df.REF_SCORE, df.MOTIF)]
     df.insert(8, '-LOG10(REF_PVAL)', ref_pvals)
     df[['-LOG10(VAR_PVAL', '-LOG10(REF_PVAL']] = df[['-LOG10(VAR_PVAL', '-LOG10(REF_PVAL']].apply(pd.to_numeric)
     df.insert(9, 'LOG2_FC_PVALS', np.log2(df['-LOG10(VAR_PVAL'] / df['-LOG10(REF_PVAL']))
@@ -468,8 +515,9 @@ def calc_pvals(df, background, matrices):
     return df
 
 
-def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc):
+def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
     """
+    Summarize each variant/motif/gene/sample/enhancer set, calculating p-values, distance scores, and plots.
 
     Args:
         vcf_file (str):
@@ -484,6 +532,8 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc):
             Background frequency of A, C, G, and T. Must sum to 1.
         pc (float):
             Pseudocount value to be used for PWM generation.
+        proc (int):
+            Number of processor cores to utilize.
     """
 
     with open(vcf_file) as f:
@@ -523,8 +573,9 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc):
 
         # Get p-values if motif file provided.
         if motif_file:
+            print("Calculating p-values. This may take some time.")
             pwms = get_pwms(motif_file, background, pc)
-            scaled_df = calc_pvals(scaled_df, background, pwms)
+            scaled_df = get_pvals(scaled_df, background, pwms, proc)
 
         print("Creating output files and plots.")
         scaled_df.to_csv(rest_out_file, sep="\t", index=False)
@@ -561,6 +612,7 @@ if __name__ == '__main__':
     parser.add_argument("-t", "--t_freq", dest="t_freq", required=False, default=0.25, type=float)
     parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
                         required=False, default=0.1, type=float)
+    parser.add_argument("-p", "--processors", dest="processors", required=False, default=1, type=int)
     args = parser.parse_args()
 
     if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1:
@@ -569,4 +621,4 @@ if __name__ == '__main__':
         print("Background frequencies must equal 1. Check input parameters, exiting.")
         sys.exit()
 
-    main(args.inp_file, args.out_pre, args.d_thresh, args.motif_file, bp, args.pseudocounts)
+    main(args.inp_file, args.out_pre, args.d_thresh, args.motif_file, bp, args.pseudocounts, args.processors)
