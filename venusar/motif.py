@@ -1281,7 +1281,7 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
 
     with open(input_f) as f:
 
-        # JASPAR motif file has >id  name \n A [ tab delineated weight array ] \n
+        # JASPAR motif file has >id                        name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
         iden = "No id found"
         name = "No name found"
