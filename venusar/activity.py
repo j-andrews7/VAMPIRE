@@ -2,8 +2,8 @@
 """
 For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and some
 value for each loci for each sample, find loci that overlap a variant and compare the value of samples with the variant
-to those without the variant. Report z-scores for each loci overlapped in an output VCF and report the variants for
-each loci in a bed-like, loci-centric output file as well.
+to those without the variant. Report robut z-scores for each loci overlapped in an output VCF and report the variants
+for each loci in a bed-like, loci-centric output file as well.
 
 Usage: activity.py -i <input.vcf> -a <activity.bed> -ov <output.vcf> -ob <output.bed> [OPTIONS]
 
@@ -12,60 +12,27 @@ Args:
     -a (str): Path to activity 'bed' file.
     -ov (str): Path to VCF output file to be created.
     -ob (str): Path to loci output file to be created.
-    -th (float, optional): Z-score magnitutde threshold that must be met for variants/loci to be reported to output.
+    -th (float, optional): Z-score magnitude threshold that must be met for variants/loci to be reported to output.
         Default is 0, so all loci a variant overlaps will be reported.
     -fan (int, optional): Set number of samples that must meet z-score threshold for a locus to be reported to
         bed output file. So this number of samples must have the variant and have the locus's activity be significantly
         affected by it. Default is 0, so a locus will be reported if its activity is altered in even one sample above
-        the z-score threshold.
+        the robust z-score threshold.
     -ib (bool, optional): Should loci that don't contain any variants that significantly affect their activity
         be included in the bed output? False by default, set to True if wanted.
     -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
         vcf output? False by default, set to True if wanted.
 """
+
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import argparse
 import time
-from statistics import mean, stdev
+from statistics import median
+from sequence import read_line2sample_list
+from utils import Position, timeString
 
 
-class Position(object):
-    """
-    Use to represent and handle genomic ranges more easily.
-
-    Args:
-        chrom (str): Chromosome.
-        start (int): Start position.
-        end (int): End position.
-    """
-
-    def __init__(self, chrom, start_pos, end_pos):
-        self.chrom = chrom
-        self.start = start_pos
-        self.end = end_pos
-
-    def overlaps(self, pos_b):
-        """
-        Return whether self overlaps Position pos_b.
-
-        Args:
-            pos_b (Position): Another Position.
-
-        Returns:
-            bool: True if self overlaps with Position pos_b. False if not.
-        """
-        if pos_b is None:
-            return False
-
-        if self.chrom != pos_b.chr:
-            return False
-
-        start_max = max(self.start, pos_b.start)
-        end_min = min(self.end, pos_b.end)
-
-        return start_max <= end_min
-
-
-# TODO - Move into utils.py file and import as appropriate.
+# TODO - Move into a utils.py file and import as appropriate. Add doc_string.
 class Variant(object):
     """
     Use to process and handle variant records from a VCF more easily. Create from line of VCF file.
@@ -73,7 +40,8 @@ class Variant(object):
 
     def __init__(self, line, all_sample_names):
         self.line_list = line.strip().split("\t")
-        self.pos = Position(self.line_list[0], int(self.line_list[1]), len(self.line_list[3]))
+        self.pos = Position(self.line_list[0], int(self.line_list[1]),
+                            (int(self.line_list[1]) + len(self.line_list[3])))
         self.ref_allele = self.line_list[3]
         self.var_allele = self.line_list[4]
         self.iden = self.line_list[2]
@@ -84,7 +52,7 @@ class Variant(object):
         self.loci = []
 
         if self.var_samples is not None:  # Should never evaluate to False.
-            self.num_var_samps = len(self.samples)
+            self.num_var_samps = len(self.var_samples)
         else:
             self.num_var_samps = 0
 
@@ -101,12 +69,22 @@ class Variant(object):
         """
         samples = None
         motif_fields = []
-        for field in self.info_fields:
-            field_info = field.split("=")
-            name, data = (field_info[0], field_info[1])
 
-            # TODO - Include method that parses header to determine # samples rather than this lazy method.
-            if name is "set":
+        for field in self.info_fields:
+            if field != "INDEL":  # Take care of INDEL flag.
+                field_info = field.split("=")
+
+                # TODO - This is a hack work around a bug that's messing up the MOTIFN field in tf_expression.py.
+                # Go back and actually figure out why the MOTIFN field is getting split up sometimes.
+                try:
+                    name, data = (field_info[0], field_info[1])
+                except:
+                    name, data = "BROKEN", None
+            else:
+                name, data = "INDEL", None
+
+            # TODO - Write method that parses header to determine # samples with variant rather than this lazy method.
+            if name == "set":
                 samples = data.split("-")
             elif name.startswith("MOTIF"):
                 motif_fields.append(field)
@@ -128,10 +106,12 @@ class Variant(object):
         """
         info = self.info_fields
         info.insert(0, "SAMPSTV=" + ",".join(self.var_samples))
-        info.insert(0, "SAMPSR=" + ",".join([x.ref_samples[self] for x in self.loci[0]]))
-        info.insert(0, "SAMPSV=" + ",".join([x.var_samples[self] for x in self.loci[0]]))
-        info.insert(0, "SAMPSNR=" + ",".join([x.num_valid_ref[self] for x in self.loci[0]]))
-        info.insert(0, "SAMPSNV=" + ",".join([x.num_valid_var[self] for x in self.loci[0]]))
+        info.insert(0, "SAMPSR=" + ",".join([x.ref_samples[self] for x in self.loci][0]))
+        info.insert(0, "SAMPSV=" + ",".join([x.var_samples[self] for x in self.loci][0]))
+
+        # TODO - Check and make sure next two lines are functioning properly.
+        info.insert(0, "SAMPSNR=" + ",".join([str(x.num_valid_ref[self]) for x in self.loci]))
+        info.insert(0, "SAMPSNV=" + ",".join([str(x.num_valid_var[self]) for x in self.loci]))
 
         # Use lists to maintain order in output so that LOCIID, LOCIVZ, SAMPTHN fields can all be matched up.
         z_scores = []
@@ -140,22 +120,24 @@ class Variant(object):
         for item in self.loci:
             loci_idens.append(item.iden)
             pass_thresh.append(item.num_pass_thresh[self])
-            tmp = "(" + ",".join([x for x in item.z_scores[self]]) + ")"
+            tmp = "(" + ",".join([str(round(x, 4)) for x in item.z_scores[self][0]]) + ")"
             z_scores.append(tmp)
-        info.insert(0, "SAMPTHN=" + ",".join(pass_thresh))
+        info.insert(0, "SAMPTHN=" + ",".join([str(x) for x in pass_thresh]))
         info.insert(0, "LOCIVZ=" + ",".join(z_scores))
         info.insert(0, "LOCIID=" + ",".join(loci_idens))
 
-        if include_vcf and all([x == 0 for x in pass_thresh]):
-            return None
-        else:
+        # Check if any loci have samples that pass the Z-score threshold.
+        # TODO - Change this so it check that the NUMBER OF SAMPLES reaching the z-score threshold are enough.
+        if any([x >= 1 for x in pass_thresh]):
             self.info_fields = info
             self.line_list[7] = ";".join(self.info_fields)
             output = "\t".join(self.line_list)
             return output
+        else:
+            return None
 
 
-# TODO - Move into utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
+# TODO - Move into a utils.py file and import as appropriate. Make ActLocus a sub-class of Locus along with GeneLocus.
 class Locus(object):
     """
     Use to process and handle loci records from an activity file more easily.
@@ -169,10 +151,10 @@ class Locus(object):
 
     def __init__(self, line):
         line_list = line.strip().split("\t")
-        self.pos = Position(line_list[0], int(line_list[1]), len(line_list[2]))
+        self.pos = Position(line_list[0], int(line_list[1]), int(line_list[2]))
         self.orig_line = line.strip()
-        self.iden = str(line[3])
-        self.data = [float(x) for x in line[4:]]
+        self.iden = str(line_list[3])
+        self.data = [float(x) for x in line_list[4:]]
         self.var_samples = {}
         self.ref_samples = {}
         self.ref_scores = {}
@@ -185,7 +167,7 @@ class Locus(object):
 
     def add_variant(self, variant, var_samples, ref_samples):
         """
-        Add Variant object variant to list of variants that overlap the Locus.
+        Add Variant object variant to list of Variants that overlap the Locus.
         """
         self.variants.append(variant)
         self.ref_scores[variant] = []
@@ -198,41 +180,43 @@ class Locus(object):
         self.z_scores[variant] = []
 
     def calc_z_score(self, ref_ind, var_ind, variant, thresh=0):
-        self.num_valid_ref = len(ref_ind)
-        self.num_valid_var = len(var_ind)
+        """
+        Calculate a robust z-score for the given locus and variant.
 
-        if len(ref_ind) > 1:  # If all samples (or all but 1) have the variant, can't calc z-score, return 'NA'.
-            for entry in ref_ind:
-                scores = self.ref_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.ref_scores[variant] = scores
-            for entry in var_ind:
-                scores = self.var_scores[variant]
-                scores.append(self.data[int(entry)])
-                self.var_scores[variant] = scores
+        This uses the median absolute deviation (MAD):
+        https://en.wikipedia.org/wiki/Median_absolute_deviation
+        """
+        self.num_valid_ref[variant] = len(ref_ind)
+        self.num_valid_var[variant] = len(var_ind)
 
-            ref_mean = mean(self.ref_scores)
-            ref_std = stdev(self.ref_scores)
+        for entry in ref_ind:
+            scores = self.ref_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.ref_scores[variant] = scores
+        for entry in var_ind:
+            scores = self.var_scores[variant]
+            scores.append(self.data[int(entry)])
+            self.var_scores[variant] = scores
 
-            if ref_std != 0:  # If only one sample has ref, will have no variance. Should never happen.
-                for i in var_ind:
-                    vals = self.z_scores[variant]
-                    vals.append("NA")
-                    self.z_scores[variant] = vals
-            else:
-                score = [((x - ref_mean) / ref_std) for x in self.var_scores]
-                if abs(score) >= thresh:  # Check number of variant samples that passed the threshold.
-                    passed = self.num_pass_thresh[variant]
-                    passed += 1
-                    self.num_pass_thresh[variant]
-                vals = self.z_scores[variant]
-                vals.append(score)
-                self.z_scores[variant] = vals
-        else:
-            for i in var_ind:
-                vals = self.z_scores[variant]
-                vals.append("NA")
-                self.z_scores[variant] = vals
+        # MAD calculation.
+        all_scores = self.ref_scores[variant] + self.var_scores[variant]
+        med = median(all_scores)
+        abs_score = [abs(x - med) for x in all_scores]
+        mad = median(abs_score) * 1.4826
+        # 1.4826 is a constant that assumes a normal distribution to use the MAD as a consistent estimator
+        # of standard deviation.
+
+        robust_z_scores = [((x - med) / mad) for x in self.var_scores[variant]]
+
+        for item in robust_z_scores:
+            if abs(item) >= thresh:  # Check number of variant samples that passed the threshold.
+                passed = self.num_pass_thresh[variant]
+                passed += 1
+                self.num_pass_thresh[variant] = passed
+            vals = self.z_scores[variant]
+            vals.append(robust_z_scores)
+            self.z_scores[variant] = vals
+
         return
 
     def get_locus_output(self, include_bed=False, filter_num=0):
@@ -262,9 +246,9 @@ class Locus(object):
             if num_meet_thresh < filter_num and include_bed is False:
                 continue  # Just go to next Variant if required number of samples didn't meet z-score threshold.
 
-            out_line = [chrom, start, end, iden]
+            out_line = [chrom, str(start), str(end), str(iden)]
             motifs_out = ";".join(item.motif_fields)
-            out_line.append(item.pos.chrom + ":" + item.pos.start + "_" + item.ref_allele + ">" + item.var_allele)
+            out_line.append(item.pos.chrom + ":" + str(item.pos.start) + "_" + item.ref_allele + ">" + item.var_allele)
             val_var_samps = self.var_samples[item]
             num_val_var = len(self.var_samples[item])
             val_ref_samps = ",".join(self.ref_samples[item])
@@ -272,14 +256,14 @@ class Locus(object):
             all_var_samps = ",".join(item.var_samples)
             num_all_var_samps = len(item.var_samples)
             all_ref_samps = ",".join(item.ref_samples)
-            num_all_ref_samps = len(item.var_samples)
+            num_all_ref_samps = len(item.ref_samples)
 
             # Handle z_scores.
             scores_out = []
             scores = self.z_scores[item]
             for x in range(len(val_var_samps)):
                 samp = val_var_samps[x]
-                score = scores[x]
+                score = round(scores[x][x], 4)
                 scores_out.append(samp + "=" + str(score))
 
             out_line.append(",".join(scores_out))
@@ -326,27 +310,6 @@ def get_activity_samples(header_line):
     return act_samples
 
 
-def get_vcf_samples(header_line):
-    """
-    Parse header of VCF file to return sample names found in file.
-
-    Args:
-        header_line (str): Header line from VCF file.
-
-    Returns:
-        vcf_samples (list of str): List of samples with data in VCF file.
-    """
-    line_list = header_line.strip().split("\t")
-    samples = line_list[9:]
-    vcf_samples = []
-
-    for item in samples:
-        sample = item.split(".")[-1]
-        vcf_samples.append(sample)
-
-    return vcf_samples
-
-
 def compare_samples(act_samples, vcf_samples):
     """
     Compare samples from activity file and vcf file.
@@ -385,7 +348,7 @@ def parse_activity_file(activity_file):
         act_data (list of Locus): List of Locus objects.
     """
     with open(activity_file) as f:
-        header = f.readline.strip()
+        header = f.readline().strip()
         act_samples = get_activity_samples(header)  # Get sample names/indices.
         act_data = []
 
@@ -396,9 +359,65 @@ def parse_activity_file(activity_file):
         return (act_samples, act_data)
 
 
-def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False):
+def reduce_activity_names(act_samps, split_string="_"):
     """
-    Compare activity of loci for samples harboring a variant without them and those that do not.
+    Return only unique part of names in the passed list set.
+
+    Code assumes either start or end is unique based on unique set size
+
+    Args:
+        act_samps: list of strings for the activity samples
+            or dictionary with keys being strings for activity samples
+        split_string: String to split individual act_samps on
+            assumes single split is relevant
+            default = "_"
+    Returns:
+        act_samps modified to not include the non-unique part of the input strings
+        returns same type as the input act_samps, list or dict
+    """
+
+    split_one = []
+    split_two = []
+
+    for sample in act_samps:
+        # 1. split on split_string
+        splitList = sample.split(split_string)
+        # 2. put first split and all remaining splits in 2 arrays
+        split_one.append(splitList[0])
+        if len(splitList) == 1:
+            # because otherwise it adds an empty list item and breaks below
+            split_two.append("")
+        else:
+            split_two.append(split_string.join(splitList[1:]))
+
+    # 3. determine the unique set size (just making it a set makes them unique
+    s1 = set(split_one)
+    s2 = set(split_two)
+
+    if len(s1) > len(s2):
+        # s2 is the non-unique part; ie s1 is unique
+        act_samps_temp = list(s1)
+    else:
+        # s1 is the non-unique part; ie s2 is unique
+        act_samps_temp = list(s2)
+
+    if type(act_samps) is list:
+        # do nothing just return
+        return (act_samps_temp)
+    elif type(act_samps) is dict:
+        # must rebuild the dictionary
+        act_samps_rebuild = {}
+        ind = -1
+        for sample in act_samps:
+            ind = ind + 1
+            act_samps_rebuild[act_samps_temp[ind]] = act_samps[sample]
+        return (act_samps_rebuild)
+
+
+def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False,
+         drop_act_=1):
+    """
+    Compare activity of loci for samples harboring a variant within a given locus to those samples that do not.
 
     For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and
     some value for each loci for each sample, find loci that overlap a variant and compare the value of samples with
@@ -417,8 +436,14 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             variant in them that significantly affects their activity.
         include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie in
             a Locus and significantly affect its activity.
+        drop_act_ (integer, optional): If > 0 then break activity items on _,
+            return only unique part of name.
+            code assumes either start or end is unique based on unique set size
+            once dropped reruns comparison to the vcf samples
+            if 1: only runs if prior vcf comparison results in no overlap
+            if 2: runs no matter what
     """
-    print("Parsing activity data file.")
+    print("Parsing activity data file: " + timeString() + ".")
     act_samps, act_data = parse_activity_file(act_file)
 
     output_vcf = open(out_vcf, "w")
@@ -440,8 +465,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
                  '.">\n')
         info += ('##INFO=<ID=SAMPSV,Number=.,Type=String,Description="Samples with the variant allele and loci data.'
                  '">\n')
-        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Z-score for each loci containing the variant.'
-                 ' Calculated for each sample containing the variant for each loci.">\n')
+        info += ('##INFO=<ID=LOCIVZ,Number=.,Type=String,Description="Robust z-score for each loci '
+                 'containing the variant. Calculated for each sample containing the variant for each loci.">\n')
         info += ('##INFO=<ID=SAMPTHN,Number=.,Type=Integer,Description="Number of samples in which the variant meets'
                  'the z-score magnitude threshold.">\n')
         info += ('##INFO=<ID=SAMPSNV,Number=1,Type=Integer,Description="Number of samples containing variant'
@@ -451,7 +476,7 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
         command = ('##venusaur=<ID=activity,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
                    ' --activity ' + act_file + ' --outputvcf ' + out_vcf + ' --outputbed ' + out_bed +
                    ' --threshold ' + str(thresh) + ' --filter_act_num ' + str(filter_num) + ' --include_bed ' +
-                   include_bed + ' --include_vcf ' + include_vcf + '">')
+                   str(include_bed) + ' --include_vcf ' + str(include_vcf) + '">')
 
         # Print new info lines at the top of the ##INFO section.
         while line.startswith("##"):
@@ -463,14 +488,35 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             print(line, file=output_vcf)
             line = f.readline().strip()
 
-        vcf_samples = get_vcf_samples(line)  # Parse VCF sample header line to get samples present in file.
+        vcf_samples = read_line2sample_list(line)  # Parse VCF sample header line to get samples present in file.
+
+        print(line, file=output_vcf)
 
         print("Comparing samples in VCF file and activity file to find commonalities.\n")
-        print("VCF samples: ", *vcf_samples, sep="\n")
-        print("Activity samples: ", *list(act_samps.keys()), sep="\n")
+        print("VCF samples: ", *vcf_samples, end="\n\n")
+        print("Activity samples: ", *list(act_samps.keys()), end="\n\n")
 
         common_samps, valid_act_samps = compare_samples(act_samps, vcf_samples)  # Get common samples b/twn the two.
-        print("Common samples: ", *common_samps, sep="\n")
+        print("Common samples: ", *common_samps, end="\n\n")
+        if drop_act_ > 0:
+            if drop_act_ == 1 and len(common_samps) == 0:
+                redo_compare = True
+                act_samps = reduce_activity_names(act_samps)
+            elif drop_act_ == 2:
+                redo_compare = True
+                # merge old and new samps to match when compare_samples is run below
+                # if they were just lists the following would work but they are not
+                # act_samps = list(set(reduce_activity_names(act_samps)) | set(list(act_samps)))
+                extend_dict = reduce_activity_names(act_samps)
+                for extdictkey in extend_dict:
+                    act_samps[extdictkey] = extend_dict[extdictkey]
+            else:
+                redo_compare = False
+            if redo_compare:
+                # Get common samples b/twn the two input sets: vcf and activity.
+                common_samps, valid_act_samps = compare_samples(act_samps, vcf_samples)
+                print("Updated Common samples: ", *common_samps, end="\n\n")
+
         print("Processing variants. This may take some time.")
         # TODO - Progress bar might actually be a decent addition.
 
@@ -478,52 +524,59 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
             current_var = Variant(line, vcf_samples)
             loci_ovlp_var = []
 
-            for item in act_data:
-                if current_var.pos.chrom == item.pos.chrom and current_var.pos.start > item.pos.end:
+            # Check if any of the variant samples actually have activity data as well, skip if not.
+            for x in current_var.var_samples:
+                if x in common_samps:
+                    for item in act_data:
+                        if current_var.pos.chrom != item.pos.chrom:
+                            continue
+                        elif current_var.pos.overlaps(item.pos):
+                            loci_ovlp_var.append(item)
                     break
-                elif current_var.pos.chrom != item.pos.chrom:
-                    continue
-                elif current_var.pos.overlaps(item.pos):
-                    loci_ovlp_var.append(item)
 
             # If variant overlaps no loci, print to output only if include_vcf option used.
             if not loci_ovlp_var:
                 if include_vcf:
-                    print(line, file=output_vcf)
+                    print(line.strip(), file=output_vcf)
                     continue
                 else:
                     continue
 
             # Get activity data indices for both samples with variant and without.
-            var_act_indices = [valid_act_samps[x] for x in current_var.samples if x in valid_act_samps]
-            ref_act_indices = [valid_act_samps[x] for x in valid_act_samps if x not in current_var.samples]
+            var_act_indices = [valid_act_samps[x] for x in current_var.var_samples if x in valid_act_samps]
+            ref_act_indices = [valid_act_samps[x] for x in valid_act_samps if x not in current_var.var_samples]
 
             # Calculate z-scores.
             for x, loc in enumerate(loci_ovlp_var):
-                var_samples = [x for x in current_var.samples if x in valid_act_samps]
-                ref_samples = [x for x in valid_act_samps if x not in current_var.samples]
+                var_samples = [x for x in current_var.var_samples if x in valid_act_samps]
+                ref_samples = [x for x in valid_act_samps if x not in current_var.var_samples]
                 loc.add_variant(current_var, var_samples, ref_samples)  # Add Variant to Locus object.
                 loc.calc_z_score(ref_act_indices, var_act_indices, current_var, thresh)
                 current_var.loci.append(loc)  # Add Locus object to given Variant.
                 loci_ovlp_var[x] = loc
-                loci_out.append(loc)  # These will be used for eventual BED output.
+                if loc not in loci_out:
+                    loci_out.append(loc)  # These will be used for eventual BED output.
 
             vcf_out_line = current_var.get_variant_output(include_vcf)
 
             if vcf_out_line is not None:
                 print(vcf_out_line, file=output_vcf)
+            elif include_vcf:
+                print(line.strip(), file=output_vcf)
 
     print("Filtering loci and creating BED output.")
     print("CHR", "START", "END", "ID", "VARIANT", "Z_SCORES", "NUM_PASS_THRESH", "COMMON_VAR_SAMPS",
-          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "ALL_REF_SAMPS",
+          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "NUM_ALL_VAR_SAMPS",
+          "ALL_REF_SAMPS", "NUM_COMMON_REF_SAMPS"
           "MOTIF_INFO", sep="\t", file=output_bed)
     for item in loci_out:
+
         bed_out_line = item.get_locus_output(include_bed, filter_num)
 
         if bed_out_line is not None:
             print(*bed_out_line, sep="\n", file=output_bed)
 
-    print("Complete.")
+    print("Complete: " + timeString() + ".")
 
 
 if __name__ == '__main__':
@@ -535,8 +588,8 @@ if __name__ == '__main__':
     parser.add_argument("-ob", "--outputbed", dest="output_bed", required=True)
     parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=0)
     parser.add_argument("-fan", "--filter_act_num", dest="filter_a_n", required=False, default=0)
-    parser.add_argument("-ib", "--include_bed", action="set_true", required=False)
-    parser.add_argument("-iv", "--include_vcf", action="set_true", required=False)
+    parser.add_argument("-ib", "--include_bed", action="store_true", required=False)
+    parser.add_argument("-iv", "--include_vcf", action="store_true", required=False)
 
     args = parser.parse_args()
 
