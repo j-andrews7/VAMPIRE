@@ -393,7 +393,7 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
                     for trans_factor in ptfs:
                         # If the transcription factor (chip peak) name is the same as
                         # the matched motif name, note that there is a chip match
-                        if trans_factor == matches[motif_idx].name:
+                        if trans_factor == matches[motif_idx].name or trans_factor == matches[motif_idx].name.strip('-'):
                             # Motif match is verified by ChIP data
                             matches[motif_idx].chip_match = True
                 # Save with new value for pmms
@@ -918,7 +918,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print("\tref int: " + format(ref_seq) +
               "\n\tvar int: " + format(var_seq))
         print("start motif_match_int")
-        plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)
+        plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l, False)
         #     plusmatch returns an list of MotifMatch objects
         # 5. Add local environment data:
         print("start process_local_env_int")
@@ -931,7 +931,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print("\tref rc int: " + format(ref_seq_rc) +
               "\n\tvar rc int: " + format(var_seq_rc))
         print("start motif_match_int reverse complement")
-        minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
+        minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l, True)
         # 7. Add local environment data
         print("start process_local_env_int reverse complement")
         minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,

@@ -204,7 +204,7 @@ class MotifArray:
 
         return matches
 
-    def motif_match_int(self, baseline_p, ref_seq, var_seq, wing_l):
+    def motif_match_int(self, baseline_p, ref_seq, var_seq, wing_l, negative):
         """
         Takes a reference and variant sequence integer representation,
         then checks for matches in the motif set.
@@ -221,6 +221,8 @@ class MotifArray:
             wing_l = Integer length of sequence of bases flanking the variant
                 (generally >= self.max_positions, should match value used to
                 create ref_seq and var_seq)
+            negative = boolean, if true, mark matched motif names with dash
+                used to indicate at reverse complement match. ie -TF_NAME
 
         Returns: A list of MotifMatch objects
 
@@ -229,8 +231,8 @@ class MotifArray:
 
         # scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
-        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False, negative)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False, negative)
 
         matches = []    # list of MotifMatch objects
 
@@ -263,6 +265,7 @@ class MotifArray:
         Same as motif_match_int except instead of returning a match set
         filtered on thresholds the function prints all comma separated scores
         one line for variant set and one line for reference set
+        note: does not flag negative matches as motif_match_int can
 
         column 1 is code for variant or reference
 
@@ -289,8 +292,8 @@ class MotifArray:
 
         # 1. scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
-        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False, False)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False, False)
 
         # 2. open the file
         write_header = False
@@ -464,7 +467,7 @@ class MotifArray:
 
         return scores
 
-    def motif_scores_int(self, baseline_p, sequence_int, wing_l, normalize):
+    def motif_scores_int(self, baseline_p, sequence_int, wing_l, normalize, negative):
         """
         Calculate if any motifs in the motif list match the given sequence.
         Requires that no motif have a length of 0.
@@ -480,6 +483,8 @@ class MotifArray:
             normalize = boolean, if true then divide score by motif length
                 concern: if not normalized, longer motifs can generate higher
                 scores by length not true matches.
+            negative = boolean, if true, mark matched motif names with dash
+                used to indicate at reverse complement match. ie -TF_NAME
 
         Returns:
             matches = array of scores of the form:
@@ -537,7 +542,11 @@ class MotifArray:
 
             # debug print("Max match score:"+str(max_score)+" for motif "+name+" and
             # sequence "+match_seq+".")
-            tupl = (motif_element.id, motif_element.name,
+            if negative:
+                tupl = (motif_element.id, '-' + motif_element.name,
+                    motif_threshold, max_score, match_seq, motif_index)
+            else:
+                tupl = (motif_element.id, motif_element.name,
                     motif_threshold, max_score, match_seq, motif_index)
             scores.append(tupl)
 
@@ -1332,8 +1341,8 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
-        iden = "No id found"
-        name = "No name found"
+        #iden = "No id found"
+        #name = "No name found"
         # Index for line in the motif matrix.
         i = -1
 
