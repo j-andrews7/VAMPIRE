@@ -39,6 +39,26 @@ parser = argparse.ArgumentParser(usage=__doc__)
 
 def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):
     thresholds = []
+
+    # -- pre-processing passed variables
+    if bp is None:
+        bp = [0.25, 0.25, 0.25, 0.25]
+    else:
+        bp = motif.get_baseline_probs(bp)
+    if d_th is not None:
+        d_th = float(d_th)
+    else:
+        d_th = None
+    fpr = float(fpr)
+    pe = int(pe)
+    if pe > 5:
+        print(("Warning: high precision exponent (-pe=" +
+               str(pe) + ") may cause drastic slowing or memory errors"))
+    if pe <= 0:
+        pe = 1
+        print(("Precision exponent (-pe) too low, set to " + str(pe)))
+
+    # -- start function in earnest
     background = {'A': bp[0], 'C': bp[1], 'T': bp[2], 'G': bp[3]}
     print(("Baseline nucleotide frequencies:\n\t" + str(background)))
 
@@ -91,23 +111,11 @@ if __name__ == '__main__':
 
     motif_file = args.motif_file
     motif_outfile = args.motif_outfile
-    if args.baseline_file is not None:
-        bp = [0.25, 0.25, 0.25, 0.25]
-    else:
-        bp = motif.get_baseline_probs(args.baseline_file)
+    d_th = args.threshold
     pc = args.pseudocounts
-    if args.threshold is not None:
-        d_th = float(args.threshold)
-    else:
-        d_th = None
+    bp = args.baseline_file
     ow = args.overwrite
-    fpr = float(args.false_pos_rate)
-    pe = int(args.precision_exp)
-    if pe > 5:
-        print(("Warning: high precision exponent (-pe=" +
-               str(pe) + ") may cause drastic slowing or memory errors"))
-    if pe <= 0:
-        pe = 1
-        print(("Precision exponent (-pe) too low, set to " + str(pe)))
+    fpr = args.false_pos_rate
+    pe = args.precision_exp
 
     main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe)
