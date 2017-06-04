@@ -23,6 +23,82 @@ def cli(name, as_cowboy):
 config_file = 'venusar_default.config'
 
 
+def createConfigLookup():
+    """
+    return dictionary of lookups to convert config file variable names
+    to main variable names for each program
+
+    Caveat: for this to be right any time a new file is added or the
+    main of an existing file changed both this lookup and the config
+    file must be updated as needed to reflect the addition/changes
+
+    Args:
+    Returns:
+        dictionary: key = (program_name.py, config_variable_name)
+                    value = the abbreviated often obscure main name that matches
+                        the verbose config_variable_name
+
+    """
+    config_var_lookup = {}    # dictionary
+
+    # note: some of these definitions are not translations but defined for clarity
+    #    and to avoid key missing lookup errors in rest of code
+    config_var_lookup[('thresholds.py', 'motif_file')] = 'motif_file'
+    config_var_lookup[('thresholds.py', 'motif_outfile')] = 'motif_outfile'
+    config_var_lookup[('thresholds.py', 'baseline_file')] = 'bp'
+    config_var_lookup[('thresholds.py', 'pseudocounts')] = 'pc'
+    config_var_lookup[('thresholds.py', 'threshold')] = 'd_th'
+    config_var_lookup[('thresholds.py', 'false_pos_rate')] = 'fpr'
+    config_var_lookup[('thresholds.py', 'precision_exp')] = 'pe'
+    config_var_lookup[('thresholds.py', 'overwrite')] = 'ow'
+
+    config_var_lookup[('tf_expression.py', 'input_file')] = 'inp_file'
+    config_var_lookup[('tf_expression.py', 'exp_file')] = 'exp_file'
+    config_var_lookup[('tf_expression.py', 'output_file')] = 'out_file'
+    config_var_lookup[('tf_expression.py', 'motif_file')] = 'motif_file'
+    config_var_lookup[('tf_expression.py', 'motif_out_file')] = 'motifout_file'
+    config_var_lookup[('tf_expression.py', 'threshold')] = 'th'
+
+    config_var_lookup[('motifs.py', 'input_file')] = 'file_input'
+    config_var_lookup[('motifs.py', 'file_reference')] = 'file_reference_genome'
+    config_var_lookup[('motifs.py', 'file_motif')] = 'file_motif'
+    config_var_lookup[('motifs.py', 'output_file')] = 'file_output'
+    config_var_lookup[('motifs.py', 'baseline_file')] = 'file_baseline_prob'
+    config_var_lookup[('motifs.py', 'pseudocounts')] = 'pc'
+    config_var_lookup[('motifs.py', 'threshold')] = 'th'
+    config_var_lookup[('motifs.py', 'wing_size')] = 'ws'
+    config_var_lookup[('motifs.py', 'multi_var')] = 'multivar_distance'
+    config_var_lookup[('motifs.py', 'run_homotypic')] = 'run_homotypic'
+    config_var_lookup[('motifs.py', 'force_ref_match')] = 'force_ref_match'
+    config_var_lookup[('motifs.py', 'chip_file')] = 'file_chip'
+    config_var_lookup[('motifs.py', 'chip_out_file')] = 'file_output_chip'
+    config_var_lookup[('motifs.py', 'filter_co')] = 'filter_co'
+    config_var_lookup[('motifs.py', 'kary_sort')] = 'sorted_lex'
+    config_var_lookup[('motifs.py', 'filter_chip')] = 'filter_chip'
+    config_var_lookup[('motifs.py', 'filter_motif')] = 'filter_motif'
+    config_var_lookup[('motifs.py', 'filter_novel')] = 'filter_novel'
+
+    config_var_lookup[('activity.py', 'input_file')] = 'vcf_file'
+    config_var_lookup[('activity.py', 'activity_file')] = 'act_file'
+    config_var_lookup[('activity.py', 'output_vcf')] = 'out_vcf'
+    config_var_lookup[('activity.py', 'output_bed')] = 'out_bed'
+    config_var_lookup[('activity.py', 'threshold')] = 'thresh'
+    config_var_lookup[('activity.py', 'filter_bed_num')] = 'filter_num'
+    config_var_lookup[('activity.py', 'include_bed')] = 'include_bed'
+    config_var_lookup[('activity.py', 'include_vcf')] = 'include_vcf'
+    config_var_lookup[('activity.py', 'drop_activity_')] = 'drop_act_'
+
+    config_var_lookup[('gene_expression.py', 'input_file')] = 'vcf_file'
+    config_var_lookup[('gene_expression.py', 'expression_file')] = 'exp_file'
+    config_var_lookup[('gene_expression.py', 'output_vcf')] = 'out_vcf'
+    config_var_lookup[('gene_expression.py', 'wing_size')] = 'size'
+    config_var_lookup[('gene_expression.py', 'threshold')] = 'thresh'
+    config_var_lookup[('gene_expression.py', 'ethreshold')] = 'ethresh'
+    config_var_lookup[('gene_expression.py', 'include_vcf')] = 'include_vcf'
+
+    return(config_var_lookup)
+
+
 def key2val_or_null(dictionary, get_key):
     """given a dictionary and key return the value or None if key is not defined"""
 
@@ -115,7 +191,7 @@ def process_config(method_set, var2val):
     #    exec ignores return value
     #    eval returns the value
     # ref: https://stackoverflow.com/questions/8028708/dynamically-set-local-variable
-    # Note: both of the following seem to work!
+    # Note: both of the following seem to work if import tf_expression first
     # exec('tf_expression.main(inp_file="../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf",exp_file="../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt",out_file="test_file",motif_file="../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt",th=None,motifout_file="test_file_two.vcf",use_vcf=True)')
     # exec("tf_expression.main(inp_file='../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf',exp_file='../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt',out_file='test_file',motif_file='../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt',th=None,motifout_file='test_file_two.vcf',use_vcf=True)")
 
