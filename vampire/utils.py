@@ -31,7 +31,27 @@ class Position(object):
 
     def overlaps(self, pos_b):
         """
-        Return whether self overlaps Position pos_b's wings.
+        Return whether self overlaps Position pos_b's start and end.
+
+        Args:
+            pos_b (Position): Another Position.
+
+        Returns:
+            bool: True if self overlaps with Position pos_b. False if not.
+        """
+        if pos_b is None:
+            return False
+
+        if self.chrom != pos_b.chrom:
+            return False
+
+        start1, start2, end1, end2 = (self.start, pos_b.start, self.end, pos_b.end)
+
+        return end1 >= start2 and end2 >= start1
+
+    def overlaps_wings(self, pos_b):
+        """
+        Return whether self overlaps Position pos_b's start and end.
 
         Args:
             pos_b (Position): Another Position.

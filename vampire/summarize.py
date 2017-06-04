@@ -37,7 +37,6 @@ import argparse
 import sys
 import time
 from math import sqrt
-from math import log10
 from multiprocessing.dummy import Pool as ThreadPool
 import itertools
 from timeit import default_timer as timer
@@ -314,7 +313,10 @@ def plot_distances(df, out_prefix):
         marker=dict(
             size=4,                 # Using gene expression as color scale values for now.
             color=df.SCALED_DISTANCE,                # set color to an array/list of desired values
-            colorscale='Viridis',   # choose a colorscale
+            colorscale=[[0, 'rgb(188, 191, 196)'], [0.5, 'rgb(188, 191, 196)'], [1, 'rgb(170, 1, 15)']],   # colorscale
+            colorbar=dict(
+                title='Scaled Distance'
+            ),
             opacity=0.8
         )
     )
@@ -384,7 +386,6 @@ def scale_and_frame(all_output):
     df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
         'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
                                                        'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
-    print(df.head(10))
 
     # Get scaling factors.
     motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
@@ -427,8 +428,8 @@ def get_pwms(motifs_file, background, pc=0.1):
         pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
         name = m.name
         # Create R matrix from motif pwm.
-        mat = robjects.r.matrix(robjects.FloatVector(pwm[0] + pwm[1] + pwm[2] + pwm[3]),
-                                nrow=4)
+        mat = R.r.matrix(R.FloatVector(pwm[0] + pwm[1] + pwm[2] + pwm[3]),
+                         nrow=4)
         pwms[name] = mat
     fh.close()
 
@@ -456,19 +457,21 @@ def find_pval(r_func, matrices, m_score, r_bg):
     matrix = matrices[motif]
 
     start = timer()
-    pval = r_func(matrix, score, r_bg)
+    pval = r_func(matrix, score, r_bg)  # Actually calls the TFMPvalue function to calculate the p-value.
+    if pval[0] == 0:
+        pval[0] = 0.000000000000001  # So log can still be taken.
     end = timer()
 
     print(motif + ": " + str(end - start))
 
-    # Attempt to free memory by running R and python garbage collectors. This was an issue.
+    # Attempt to free memory by running R and python garbage collectors. This was an issue, not sure this resolves it.
     R.r("gc()")
     gc.collect()
 
-    return -log10(pval)
+    return float(pval[0])
 
 
-def get_pvals(df, background, matrices, proc):
+def get_pvals(df, bg, matrices, proc):
     """
     Utilize the TFMPvalue R package to calculate p-values for both the variant and reference scores for a given
     variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
@@ -476,7 +479,7 @@ def get_pvals(df, background, matrices, proc):
     Args:
         df (pandas DataFrame):
             Dataframe containing the motif scores for the variant and reference samples.
-        background (list of float):
+        bg (list of float):
             A, C, T, and G background frequencies.
         matrices (dict of R matrices):
             {motif name: R pwm matrix}
@@ -487,30 +490,31 @@ def get_pvals(df, background, matrices, proc):
         df (pandas DataFrame):
             Updated DataFrame with p-values.
     """
+    r_background = R.FloatVector((bg[0], bg[1], bg[2], bg[3]))
     # Define R function to use.
     calc_pval = R.r('''
         function(mat, score, bg) {
+            options(digits=20)
             rownames(mat, do.NULL = TRUE, prefix = "row")
             rownames(mat) <- c("A","C","G","T")
-            bg <- c(A=bg[1], C=bg[2], G=bg[3], T=bg[4])
+            names(bg) <- c("A","C","G","T")
             TFMsc2pv(mat, score, bg, type="PWM")
         }
         ''')
-
     ref_scores = [x for x in zip(df.REF_SCORE, df.MOTIF)]
     var_scores = [x for x in zip(df.VAR_SCORE, df.MOTIF)]
 
     with ThreadPool(proc) as pool:
-        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), matrices, var_scores,
-                                  itertools.repeat(background)))
-        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), matrices, ref_scores,
-                                  itertools.repeat(background)))
+        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), var_scores,
+                                                itertools.repeat(r_background)))
+    with ThreadPool(proc) as pool:
+        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), ref_scores,
+                                                itertools.repeat(r_background)))
 
     # Insert columns for p-values.
-    df.insert(6, '-LOG10(VAR_PVAL)', var_pvals)
-    df.insert(8, '-LOG10(REF_PVAL)', ref_pvals)
-    df[['-LOG10(VAR_PVAL', '-LOG10(REF_PVAL']] = df[['-LOG10(VAR_PVAL', '-LOG10(REF_PVAL']].apply(pd.to_numeric)
-    df.insert(9, 'LOG2_FC_PVALS', np.log2(df['-LOG10(VAR_PVAL'] / df['-LOG10(REF_PVAL']))
+    df.insert(6, 'VAR_PVAL', var_pvals)
+    df.insert(8, 'REF_PVAL', ref_pvals)
+    df[['VAR_PVAL', 'REF_PVAL']] = df[['VAR_PVAL', 'REF_PVAL']].apply(pd.to_numeric)
 
     return df
 
@@ -542,7 +546,7 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
         now = time.strftime("%c")
 
         command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
-                   ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
+                   ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + ' --motif ' + motif_file + '">')
         print(command)
 
         full_out_file = open(out_prefix + "_full.txt", "w")  # Full output.
@@ -574,15 +578,16 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
         # Get p-values if motif file provided.
         if motif_file:
             print("Calculating p-values. This may take some time.")
-            pwms = get_pwms(motif_file, background, pc)
+            bio_background = {'A': background[0], 'C': background[1], 'G': background[2], 'T': background[3]}
+            pwms = get_pwms(motif_file, bio_background, pc)
             scaled_df = get_pvals(scaled_df, background, pwms, proc)
 
         print("Creating output files and plots.")
-        scaled_df.to_csv(rest_out_file, sep="\t", index=False)
+        scaled_df.to_csv(full_out_file, sep="\t", index=False)
 
         if d_thresh != 0:
             restricted_scaled_df = scaled_df[scaled_df.SCALED_DISTANCE > d_thresh]
-            restricted_scaled_df.to_csv(full_out_file, sep="\t", index=False)
+            restricted_scaled_df.to_csv(rest_out_file, sep="\t", index=False)
             plot_distances(restricted_scaled_df, out_prefix + "_restricted")
 
         # Get top 100 hits by distance.
