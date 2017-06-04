@@ -37,7 +37,7 @@ from utils import timeString
 parser = argparse.ArgumentParser(usage=__doc__)
 
 
-def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):
+def main(motif_file, motif_outfile, d_th, pc=0.1, bp, ow, fpr=0.05, pe=4):
     thresholds = []
 
     # -- pre-processing passed variables
@@ -45,12 +45,26 @@ def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):
         bp = [0.25, 0.25, 0.25, 0.25]
     else:
         bp = motif.get_baseline_probs(bp)
+
     if d_th is not None:
         d_th = float(d_th)
     else:
         d_th = None
-    fpr = float(fpr)
-    pe = int(pe)
+
+    if pc is not None:
+        pc = float(pc)
+    else:
+        pc = float(0.1)
+
+    if fpr is not None:
+        fpr = float(fpr)
+    else:
+        fpr = float(0.05)
+
+    if pe is not None:
+        pe = int(pe)
+    else:
+        pe = int(4)
     if pe > 5:
         print(("Warning: high precision exponent (-pe=" +
                str(pe) + ") may cause drastic slowing or memory errors"))
