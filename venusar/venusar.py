@@ -12,6 +12,16 @@ import math
 #@click.option('--as-cowboy', '-c', is_flag=True, help='Greet as a cowboy.')
 #@click.argument('name', default='world', required=False)
 
+# depends:
+#     a configuration file exists; see read_config() for definition or venusar_default.config
+# example use (python opened in this path same as config file):
+#     import venusar
+#    (method_set, var2val, ref2val) = venusar.read_config()
+#    process_string = venusar.print_config(method_set, var2val)
+#    process_string_t = venusar.print_config(method_set, var2val, translate=True)
+#
+#
+
 def cli(name, as_cowboy):
     """
     VAMPIRE is a full-fledged bioinformatics suite geared towards easy integration of
@@ -80,8 +90,8 @@ def createConfigLookup():
 
     config_var_lookup[('activity.py', 'input_file')] = 'vcf_file'
     config_var_lookup[('activity.py', 'activity_file')] = 'act_file'
-    config_var_lookup[('activity.py', 'output_vcf')] = 'out_vcf'
-    config_var_lookup[('activity.py', 'output_bed')] = 'out_bed'
+    config_var_lookup[('activity.py', 'output_vcf_file')] = 'out_vcf'
+    config_var_lookup[('activity.py', 'output_bed_file')] = 'out_bed'
     config_var_lookup[('activity.py', 'threshold')] = 'thresh'
     config_var_lookup[('activity.py', 'filter_bed_num')] = 'filter_num'
     config_var_lookup[('activity.py', 'include_bed')] = 'include_bed'
@@ -90,7 +100,7 @@ def createConfigLookup():
 
     config_var_lookup[('gene_expression.py', 'input_file')] = 'vcf_file'
     config_var_lookup[('gene_expression.py', 'expression_file')] = 'exp_file'
-    config_var_lookup[('gene_expression.py', 'output_vcf')] = 'out_vcf'
+    config_var_lookup[('gene_expression.py', 'output_vcf_file')] = 'out_vcf'
     config_var_lookup[('gene_expression.py', 'wing_size')] = 'size'
     config_var_lookup[('gene_expression.py', 'threshold')] = 'thresh'
     config_var_lookup[('gene_expression.py', 'ethreshold')] = 'ethresh'
@@ -115,10 +125,11 @@ def by_key(dict_key):
         return dict_key
 
 
-def print_config(method_set, var2val, print_actions=True):
+def print_config(method_set, var2val, print_actions=True, translate=False):
     """
     Given the output of a read_config variable set,
     print what will be done in order when process_config is called
+    By default does NOT translate variable names using createConfigLookup()
 
     Args:
         method_set: dictionary from read_config
@@ -128,10 +139,14 @@ def print_config(method_set, var2val, print_actions=True):
             does not care if values are dereferenced
         print_actions: if True print action string, else just return string
             boolean, default=True
+        translate: if True translate the variable names to those used by
+            the main function using call to createConfigLookup()
 
     Returns:
         action_string: the printed content as a string
     """
+
+    var_lookup = createConfigLookup()
     action_string = ""
 
     # -- determine the run order
@@ -155,7 +170,11 @@ def print_config(method_set, var2val, print_actions=True):
             if (var_name == 'run' or var_name == 'run_order'):
                 continue
             if key2val_or_null(var2val, (method_name, var_name)) is not None:
-                action_string = action_string + '\t' + var_name + '=' + \
+                if translate:
+                    print_var_name = var_lookup[(method_name, var_name)]
+                else:
+                    print_var_name = var_name
+                action_string = action_string + '\t' + print_var_name + '=' + \
                     key2val_or_null(var2val, (method_name, var_name)) + '\n'
 
         action_string = action_string + '\n'
@@ -166,7 +185,7 @@ def print_config(method_set, var2val, print_actions=True):
     return (action_string)
 
 
-def process_config(method_set, var2val):
+def process_config(method_set, var2val, debug=False):
     """
     Given the output of a read_config variable set,
     process what will be done in order
@@ -178,22 +197,30 @@ def process_config(method_set, var2val):
             key = (method_name, variable). value = value to assign
             values MUST be dereferenced, call read_config with replace_ref=True
             because code assumes references in var2val already replaced with ref2val values
+        debug: boolean, if True do not execute
+            similar to print_config with translate=True but gives actual command string
 
     Returns:
         boolean for success; True = success; False = fail
     """
 
-    print('XXX: incomplete method linked to auto config using setattr to assign variables for each method; needs review and testing')
+    var_lookup = createConfigLookup()
+    search_pattern_file = re.compile('file')    # faster to precompile
+    search_pattern_str = re.compile('str')      # faster to precompile
+
 
     # first process run & run_order variables to determine which methods get called in what order
     # then set variables and call each successive method
-    # ref: https://stackoverflow.com/questions/2220699/whats-the-difference-between-eval-exec-and-compile-in-python
-    #    exec ignores return value
-    #    eval returns the value
-    # ref: https://stackoverflow.com/questions/8028708/dynamically-set-local-variable
+    #
+    # how notes:
+    #    ref: https://stackoverflow.com/questions/8028708/dynamically-set-local-variable
+    #    ref: https://stackoverflow.com/questions/2220699/whats-the-difference-between-eval-exec-and-compile-in-python
+    #        exec ignores return value
+    #        eval returns the value
     # Note: both of the following seem to work if import tf_expression first
-    # exec('tf_expression.main(inp_file="../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf",exp_file="../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt",out_file="test_file",motif_file="../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt",th=None,motifout_file="test_file_two.vcf",use_vcf=True)')
-    # exec("tf_expression.main(inp_file='../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf',exp_file='../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt',out_file='test_file',motif_file='../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt',th=None,motifout_file='test_file_two.vcf',use_vcf=True)")
+    #     exec('tf_expression.main(inp_file="../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf",exp_file="../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt",out_file="test_file",motif_file="../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt",th=None,motifout_file="test_file_two.vcf")')
+    #     exec("tf_expression.main(inp_file='../../data/FLDL_CCCB_RARE_VARIANTS.MERGED.RNA_DP10.RNA_NODUPS.CHIP_MULTIMARK.SORTED.vcf',exp_file='../../data/ALL_ARRAYS_NORMALIZED_MAXPROBE_LOG2_COORDS.sorted.txt',out_file='test_file',motif_file='../../data/HOCOMOCOv10.JASPAR_FORMAT.TF_IDS.fpr_0p001.txt',th=None,motifout_file='test_file_two.vcf')")
+    #    also tested; changing order of the arguments; still works
 
     # -- determine the run order
     method_order_set = process_config_order(method_set, var2val)
@@ -210,17 +237,41 @@ def process_config(method_set, var2val):
             print('\tfailed config check will NOT be processed.\n')
             continue
 
-        # for each variable name in method_set define the variable: XXX: just build string here, comma separated?
+        # import the source file to run the main for
+        action_string = method_name.split('.py')[0]
+        if not debug:
+            exec('import ' + action_string)
+
+        # build the action string 1 variable at a time:
+        action_string = action_string + '.main('
+        first_variable = True
         for var_name in method_set[method_name]:
             if (var_name == 'run' or var_name == 'run_order'):
                 continue
             if key2val_or_null(var2val, (method_name, var_name)) is not None:
-                action_string = action_string + '\t' + var_name + '=' + \
-                    key2val_or_null(var2val, (method_name, var_name)) + '\n'
+                if first_variable:
+                    first_variable = False
+                else:
+                    action_string = action_string + ", "
 
-        action_string = action_string + '\n'
+                print_var_name = var_lookup[(method_name, var_name)]
 
-        # XXX: just run using exec here?
+                if (re.search(search_pattern_file, var_name) is not None or
+                    re.search(search_pattern_str, var_name) is not None):
+                    # only quote if file or str are in variable name
+                    action_string = action_string + print_var_name + '=' + \
+                    '"' + key2val_or_null(var2val, (method_name, var_name)) + '"'
+                else:
+                    # do not quote because not file or string
+                    action_string = action_string + print_var_name + '=' + \
+                        key2val_or_null(var2val, (method_name, var_name))
+
+        action_string = action_string + ')'
+
+        if debug:
+            print(action_string)
+        else:
+            exec(action_string)
 
     return (True)
 
@@ -361,7 +412,7 @@ def read_config(file_name='venusar_default.config', replace_ref=True):
             var_name = var_set[0].rstrip().lstrip()     # variable w/o leading/trailing spaces
             var_value = var_set[1].rstrip().lstrip()    # value w/o leading/trailing spaces
             if (current_program_name, var_name) in var2val:
-                # QQQ: how to handle multiple var keys if for different methods!
+                # ZZZ: how to handle multiple var keys if for different methods?
                 #     double up the key as a tuple; lists do NOT work
                 print(('WARNING: duplicate value for ' + current_program_name + "::"
                     + var_name + " using current value."))
