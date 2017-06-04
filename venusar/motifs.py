@@ -634,11 +634,38 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
 
     print("Run started at:" + timeString())
     # --------------------------------------------------------------------------------------
+    # -- pre-processing passed variables
     # handling arguments --> XXX:change all strings to opt_args print string
-
     fileHan_chip = None
     fileHan_out_chip = None
     filter_bed = False    # true if file_chip and filter_co
+
+    if run_homotypic is None:
+        run_homotypic = False
+    else:
+        if run_homotypic is not False:
+            run_homotypic = True
+
+    if force_ref_match is None:
+        force_ref_match = False
+    else:
+        if force_ref_match is not False:
+            force_ref_match = True
+
+    # Are input files chr sorted lexicographically (by karyotype order)?
+    # Input vcf file and chip bed file must be sorted the same way
+    # -sk sets this to True (means sorted lexicographically)
+    if sorted_lex is None:
+        sorted_lex = True
+    else:
+        if sorted_lex is not True:
+            sorted_lex = False
+
+    if filter_co is None:
+        filter_co = False
+    else:
+        if filter_co is not False:
+            filter_co = True
 
     if pc is not None:
         pc = float(pc)
@@ -1029,25 +1056,18 @@ if __name__ == '__main__':
     pc = float(args.pseudocounts)
     ws = int(args.wing_size)
     th = float(args.threshold)
+    run_homotypic = args.homotypic_run
+    force_ref_match = args.force_ref_match
 
     multivar_distance = args.multi_var
-
-    if args.homotypic_run is None:
-        run_homotypic = False
-    else:
-        run_homotypic = True
-
-    if args.force_ref_match is None:
-        force_ref_match = False
-    else:
-        force_ref_match = True
 
     # Are input files chr sorted lexicographically (by karyotype order)?
     # Input vcf file and chip bed file must be sorted the same way
     # -sk sets this to True (means sorted lexicographically)
-    sorted_lex = (args.kary_sort is None)
+    sorted_lex = (args.kary_sort is None)    # handled by main logic
 
-    filter_co = (args.filter_co is not None)    # sets filter_bed if file_chip
+    filter_co = (args.filter_co is not None)    # sets filter_bed if file_chip; main logic handles
+
     filter_motif = args.filter_motif
     filter_chip = args.filter_chip
     filter_novel = args.filter_novel
