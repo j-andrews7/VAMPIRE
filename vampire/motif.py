@@ -53,6 +53,71 @@ class MotifArray:
 
         return
 
+    def element_overlap(self):
+        """
+        Determine if any motifElement names in MotifArray are not unique
+        Returns dictionary of notUnique names with a list of their
+        indices in the MotifArray object
+        Args:
+            Self
+        Returns:
+            notUnique (dictionary):
+                key = motifElement.name, value = position list
+        """
+
+        notUnique = {}
+        dictNames = {}
+        #for me in self.motifs:
+        for index in range(0, (len(self.motifs) - 1)):
+            if dictNames[self.motifs[index].name] is None:
+                dictNames[self.motifs[index].name] = [index]
+            else:
+                # name already exists
+                dictNames[self.motifs[index].name].append = index
+                notUnique[self.motifs[index].name] = dictNames[self.motifs[index].name]
+
+        return notUnique
+
+    def element_overlap_rename(self, append_string=None):
+        """
+        Rename non-unique MotifElement names by adding an index
+            oldName
+            newName__1     --or--   newName__<append_string>1
+        Assumes index will not suddenly overlap with another previously
+        existing motif. Could iteratively check...
+
+        Calls element_overlap
+
+        Args:
+            Self
+            append_string (string): if not None add before index in output
+        Returns:
+            modifies Self motifElements in Self
+        """
+
+        notUnique = self.element_overlap()
+
+        if append_string is not None:
+            # use an append string
+            append_string = '__' + append_string
+        else:
+            # do use an append string
+            append_string = '__'
+
+        inf_loop_break = 0
+        while (len(notUnique) > 0 and inf_loop_break < 5):
+            inf_loop_break = inf_loop_break + 1     # just in case
+            for motifElementName in list(notUnique.keys()):
+                # non-unique motifElement Name
+                for motifArrayIndex in notUnique[motifElementName]:
+                    # index of individual MotifElement with matching name
+                    self.motifs[motifArrayIndex].name = \
+                        self.motifs[motifArrayIndex].name + \
+                        append_string + str(motifArrayIndex)
+            notUnique = self.element_overlap()      # loop check
+
+        return
+
     def element_positions_list(self, return_string):
         """
         debug function; return list of MotifArray motifElement position sizes
@@ -76,7 +141,13 @@ class MotifArray:
         return return_var
 
     def join(self, motif_array2):
-        """join another MotifArray object to this MotifArray object"""
+        """
+        join another MotifArray object to this MotifArray object
+
+        It is a good idea to check for unique MotifElements after joining
+        by calling element_overlap and handling none unique entries if
+        the returned dictionary is of non-zero length.
+        """
 
         # check validity of the items to be joined
         if type(motif_array2) is not MotifArray:
