@@ -1260,7 +1260,7 @@ class MotifMatch:
 # ______ START METHODS RELATED TO THE CLASS BUT NOT TIED TO IT _____
 #    many could be made part of MotifArray or MotifElement
 
-def get_motifs(motif_filename, pc, default_th, base_pr):
+def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     """
     Read file containing the set of motif TF. Read from frequency matrix file.
     Computes and returns probability matrices for each motif TF except
@@ -1277,6 +1277,8 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
             [ PrA, PrC, PrG, PrT ]
             ** Currently unused by this method
                 but could be used to return a pssm instead of a pwm
+        force_unique (boolean): if True (default), calls element_overlap_rename
+            prior to returning MotifArray object
 
     Returns:
         MotifArray object = set of Motif sequences as MotifElement objects
@@ -1376,6 +1378,9 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
 
     #print(("get_motifs read " + format(added_count) + " motifs from " + format(motif_filename)))
     #print(("before return set " + format(motif_set.element_positions_list(True))))
+    if force_unique:
+        motif_set.element_overlap_rename()
+
     return motif_set
 
 
