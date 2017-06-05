@@ -1,9 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-For a VEGAS'd VCF file, calculate a distance score for each motif delta score, ChIP z-score, and gene expression
-z-score set for each variant. These values will be plotted in 3 dimensional space. Additionally, simple bed-like files
-are provided as output. One contains the scores for all motif, ChIP z-score, and gene expression z-score sets for all
-variants. An optional second contains only those sets that meet the distance score threshold as defined by the user.
+For a VAMPIRE'd VCF file, calculate a distance score for each motif delta score,
+ChIP z-score, and gene expression z-score set for each variant. These values
+will be plotted in 3 dimensional space. Additionally, simple bed-like files
+are provided as output. One contains the scores for all motif, ChIP z-score, and
+gene expression z-score sets for all variants. An optional second contains only
+those sets that meet the distance score threshold as defined by the user.
 A third will report the sets for the top 100 distance scores.
 
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
@@ -11,7 +13,8 @@ Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
 Args:
     -i (str): Path to sorted variant file to process.
     -o (str): Prefix for output files.
-    -d (float, optional): Distance magnitude threshold that must be met for variants/genes to be reported to output.
+    -d (float, optional): Distance magnitude threshold that must be met for
+        variants/genes to be reported to output.
         Default is 0, so all variant-sample activity-gene set distances will be reported.
 """
 import argparse
@@ -24,7 +27,7 @@ import plotly.graph_objs as go
 
 import numpy as np
 
-from utils import Position, timeString
+from .utils import Position, timeString
 
 # YYY-JA 04/24/2017 - Hate making yet another variant (Ha) of this class.
 # Move to utils.py and make uniform across modules.
@@ -58,17 +61,23 @@ class Variant(object):
 
     def parse_info_fields(self):
         """
-        Get names of samples containing variant and motif INFO fields from a variant record's INFO fields.
+        Get names of samples containing variant and motif INFO fields from a
+        variant record's INFO fields.
 
         Args:
             self (Variant): Variant object.
 
         Returns:
-            common_samples (dict of tuple): List of samples that had variant called and have loci and expression data.
-            motif_fields (list of str): List of INFO fields for variant that contain MOTIF related information.
-            exp_fields (list of str): List of INFO fields for variant that contain Expression related information.
-            act_fields (list of str): List of INFO fields for variant that contain Activity/Loci related information.
-            genes (list of str): List of INFO fields for variant that contain MOTIF related information.
+            common_samples (dict of tuple): List of samples that had variant
+                called and have loci and expression data.
+            motif_fields (list of str): List of INFO fields for variant that
+                contain MOTIF related information.
+            exp_fields (list of str): List of INFO fields for variant that
+                contain Expression related information.
+            act_fields (list of str): List of INFO fields for variant that
+                contain Activity/Loci related information.
+            genes (list of str): List of INFO fields for variant that
+                contain MOTIF related information.
         """
         act_samples = None
         exp_samples = None
@@ -115,8 +124,9 @@ class Variant(object):
 
     def get_motif_scores(self):
         """
-        Returns the difference between reference and variant scores for each motif the variant matches
-        as a dictionary of {motif_name: (variant - reference log likelihood ratios)}.
+        Returns the difference between reference and variant scores for each
+        motif the variant matches as a dictionary of:
+            {motif_name: (variant - reference log likelihood ratios)}.
 
         Returns:
             motifs (dict of floats): {motif_name: (variant - reference log likelihood ratios)}
@@ -144,11 +154,13 @@ class Variant(object):
 
     def get_sample_data(self):
         """
-        Parses and returns the gene expression and loci activity z-scores for variant samples.
+        Parses and returns the gene expression and loci activity z-scores
+        for variant samples.
 
         Returns:
-            sample_data (list of lists of str): [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
-                                                 [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
+            sample_data (list of lists of str):
+                [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
+                [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
         """
 
         samples = self.common_samples
@@ -197,10 +209,12 @@ class Variant(object):
 
     def get_variant_summary(self):
         """
-        Creates a list of summary output fields for a given Variant as well as its distance metrics for plotting.
+        Creates a list of summary output fields for a given Variant as well as
+        its distance metrics for plotting.
 
         Returns:
-            output_fields (list of lists of str): List of lists of output fields for the Variant.
+            output_fields (list of lists of str): List of lists of output
+                fields for the Variant.
         """
         var_info = [self.pos.chrom, self.pos.start, self.ref_allele, self.var_allele]
         motif_info = self.motif_scores
@@ -215,8 +229,9 @@ class Variant(object):
                 dist_metrics = [(float(m_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
                 dist_score = calc_distance(dist_metrics)
                 # Create complete list of output fields.
-                output_fields.append(var_info + [m] + [m_score] + [s[0]] + [s[1]] + [s[2]] + [s[3]] +
-                                     [s[4]] + [dist_score])
+                output_fields.append(var_info +
+                    [m] + [m_score] +
+                    [s[0]] + [s[1]] + [s[2]] + [s[3]] + [s[4]] + [dist_score])
 
         return (output_fields)
 
@@ -258,11 +273,12 @@ def calc_distance(score_array):
 
 def plot_distances(df, out_prefix):
     """
-    Plot distance scores calculated for the delta var/ref motif log-odds ratios, activity z-score, and gene expression
-    z-score sets for each variant.
+    Plot distance scores calculated for the delta var/ref motif log-odds ratios,
+    activity z-score, and gene expression z-score sets for each variant.
 
     Args:
-        df (pandas Dataframe) = Dataframe containing all variant, distance metric, and sample info. One record per row.
+        df (pandas Dataframe) = Dataframe containing all variant, distance
+            metric, and sample info. One record per row.
         out_prefix (str) = Prefix to use for plot outputs.
     """
 
@@ -328,28 +344,33 @@ def plot_distances(df, out_prefix):
 
     fig = go.Figure(data=data, layout=layout)
     # py.image.save_as(fig, filename=out_prefix + '.png')
-    plotly.offline.plot(fig, filename=out_prefix + '.html', auto_open=False, image="png", image_filename=out_prefix)
+    plotly.offline.plot(fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix)
 
 
 def scale_and_frame(all_output):
     """
-    Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
-    metric, summation, and taking square root. Make things much easier to plot and handle.
+    Return dataframe after adding scaled distance score to each row. Scaling
+    by dividing with max value of each metric, summation, and taking square
+    root. Make things much easier to plot and handle.
 
     Args:
-        all_output (list of lists): Each list contains a set of motif, expression, activity data.
+        all_output (list of lists): Each list contains a set of
+            motif, expression, activity data:
             [sample, loci1, sample act_z_score, gene1, sample exp_z_score, distance]
 
     Returns:
-        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
-            [sample, loci1, sample act_z_score, gene1, sample exp_z_score, distance, scaled_distance]
+        df (pandas Dataframe): Each row contains a set of
+            motif, expression, activity data:
+            [sample, loci1, sample act_z_score, gene1,
+                sample exp_z_score, distance, scaled_distance]
     """
 
     df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR-REF_SCORE', 'SAMPLE', 'LOCIID',
                                            'ACT_ZSCORE', 'GENE', 'EXP_ZSCORE', 'DISTANCE'])
     df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE',
                                                                         'DISTANCE']].apply(pd.to_numeric)
-    print(df.head(10))
+    print((df.head(10)))
 
     # Get scaling factors.
     motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
@@ -381,7 +402,8 @@ def main(vcf_file, out_prefix, d_thresh):
         line = f.readline().strip()
         now = time.strftime("%c")
 
-        command = ('##vampire=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+        command = ('##vampire=<ID=summary,Date="' + now +
+                   '",CommandLineOptions="--input ' + vcf_file +
                    ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
         print(command)
 
@@ -427,7 +449,7 @@ def main(vcf_file, out_prefix, d_thresh):
         plot_distances(scaled_df, out_prefix + "_full")
         plot_distances(top100_df, out_prefix + "_top")
 
-    print("Complete at: " + timeString() + ".")
+    print(("Complete at: " + timeString() + "."))
 
 
 if __name__ == '__main__':
