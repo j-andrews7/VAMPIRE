@@ -6,7 +6,7 @@ mostly focused on reading
 does NOT contain a main function
 does NOT contain a class because does NOT currently create a VCF object
 
-intended to be imported and used by other code in venusar package
+intended to be imported and used by other code in vampire package
 """
 
 import sequence

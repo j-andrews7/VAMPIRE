@@ -1,9 +1,9 @@
 import click
-#import venusar.thresholds
-#import venusar.motifs
-#import venusar.activity
-#import venusar.tf_expression
-#import venusar.gene_expression
+#import vampire.thresholds
+#import vampire.motifs
+#import vampire.activity
+#import vampire.tf_expression
+#import vampire.gene_expression
 import os
 import re
 import math
@@ -13,12 +13,12 @@ import math
 #@click.argument('name', default='world', required=False)
 
 # depends:
-#     a configuration file exists; see read_config() for definition or venusar_default.config
+#     a configuration file exists; see read_config() for definition or vampire_default.config
 # example use (python opened in this path same as config file):
-#     import venusar
-#    (method_set, var2val, ref2val) = venusar.read_config()
-#    process_string = venusar.print_config(method_set, var2val)
-#    process_string_t = venusar.print_config(method_set, var2val, translate=True)
+#     import vampire
+#    (method_set, var2val, ref2val) = vampire.read_config()
+#    process_string = vampire.print_config(method_set, var2val)
+#    process_string_t = vampire.print_config(method_set, var2val, translate=True)
 #
 #
 
@@ -30,7 +30,7 @@ def cli(name, as_cowboy):
     greet = 'Howdy' if as_cowboy else 'Hello'
     click.echo('{0}, {1}.'.format(greet, name))
 
-config_file = 'venusar_default.config'
+config_file = 'vampire_default.config'
 
 
 def createConfigLookup():
@@ -327,14 +327,14 @@ def process_config_order(method_set, var2val):
     return(method_order_set)
 
 
-def read_config(file_name='venusar_default.config', replace_ref=True):
+def read_config(file_name='vampire_default.config', replace_ref=True):
     """
     Read the configuration file and define the data structures used
-    to set options for methods called by this wrapper (venusar.py)
+    to set options for methods called by this wrapper (vampire.py)
 
     Args:
         file_name: name of the configuration file;
-            string, default = venusar_default.config
+            string, default = vampire_default.config
         replace_ref: replace the reference values in variable=value pairs
             with the reference value.
             QQQ: would one ever not want to do this?

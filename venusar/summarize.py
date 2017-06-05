@@ -381,7 +381,7 @@ def main(vcf_file, out_prefix, d_thresh):
         line = f.readline().strip()
         now = time.strftime("%c")
 
-        command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+        command = ('##vampire=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
                    ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
         print(command)
 
