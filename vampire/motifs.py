@@ -55,10 +55,10 @@ from __future__ import print_function    # so Ninja IDE will stop complaining & 
 import sys
 import argparse
 #import pdb    # necessary for debugger; use pdb.set_trace()
-import motif
-import sequence
-import vcf
-from utils import timeString
+from . import motif
+from . import sequence
+from . import vcf
+from .utils import timeString
 
 from pyfaidx import Fasta
 
@@ -990,7 +990,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print()"""
 
         # Co-binding transcription factors currently not implemented
-        cb_dict = None    # QQQ: does what? Why was it here originally?
+        #cb_dict = None    # QQQ: does what? Why was it here originally?
 
         # Create the correct line in VCF format and print to file_output
         update_vcf(var_element.vcf_line, matches, fileHan_output, options)
