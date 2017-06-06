@@ -7,10 +7,12 @@ intended to be imported with motifs.py and other for related functionality
 """
 
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
+
 import sequence
 # need sub_from_*, crop_from_*
 # (maybe later need int func and split wing/core processing)
 # then would want base sequence object
+
 from math import log2
 import numpy as np
 
@@ -54,6 +56,71 @@ class MotifArray:
 
         return
 
+    def element_overlap(self):
+        """
+        Determine if any motifElement names in MotifArray are not unique
+        Returns dictionary of notUnique names with a list of their
+        indices in the MotifArray object
+        Args:
+            Self
+        Returns:
+            notUnique (dictionary):
+                key = motifElement.name, value = position list
+        """
+
+        notUnique = {}
+        dictNames = {}
+        #for me in self.motifs:
+        for index in range(0, (len(self.motifs) - 1)):
+            if dictNames[self.motifs[index].name] is None:
+                dictNames[self.motifs[index].name] = [index]
+            else:
+                # name already exists
+                dictNames[self.motifs[index].name].append = index
+                notUnique[self.motifs[index].name] = dictNames[self.motifs[index].name]
+
+        return notUnique
+
+    def element_overlap_rename(self, append_string=None):
+        """
+        Rename non-unique MotifElement names by adding an index
+            oldName
+            newName__1     --or--   newName__<append_string>1
+        Assumes index will not suddenly overlap with another previously
+        existing motif. Could iteratively check...
+
+        Calls element_overlap
+
+        Args:
+            Self
+            append_string (string): if not None add before index in output
+        Returns:
+            modifies Self motifElements in Self
+        """
+
+        notUnique = self.element_overlap()
+
+        if append_string is not None:
+            # use an append string
+            append_string = '__' + append_string
+        else:
+            # do use an append string
+            append_string = '__'
+
+        inf_loop_break = 0
+        while (len(notUnique) > 0 and inf_loop_break < 5):
+            inf_loop_break = inf_loop_break + 1     # just in case
+            for motifElementName in list(notUnique.keys()):
+                # non-unique motifElement Name
+                for motifArrayIndex in notUnique[motifElementName]:
+                    # index of individual MotifElement with matching name
+                    self.motifs[motifArrayIndex].name = \
+                        self.motifs[motifArrayIndex].name + \
+                        append_string + str(motifArrayIndex)
+            notUnique = self.element_overlap()      # loop check
+
+        return
+
     def element_positions_list(self, return_string):
         """
         debug function; return list of MotifArray motifElement position sizes
@@ -77,7 +144,13 @@ class MotifArray:
         return return_var
 
     def join(self, motif_array2):
-        """join another MotifArray object to this MotifArray object"""
+        """
+        join another MotifArray object to this MotifArray object
+
+        It is a good idea to check for unique MotifElements after joining
+        by calling element_overlap and handling none unique entries if
+        the returned dictionary is of non-zero length.
+        """
 
         # check validity of the items to be joined
         if type(motif_array2) is not MotifArray:
@@ -106,6 +179,51 @@ class MotifArray:
     def length(self):
         """return length of the set of motifs for the array"""
         return (len(self.motifs))
+
+    def motif_count(self, valid_only):
+        """
+        For the motif array object return the dictionary of unique motif names
+        and corresponding counts. Key = name, index = count
+
+        Args:
+            valid_only = boolean if true the count ignores invalid motifElement()s
+
+        Returns: Dictionary of unique motif names with occurence counts
+        """
+        motifSet = {}
+
+        for motif_index in range(len(self.motifs)):
+            if valid_only and not self.motifs[motif_index].valid_flag:
+                continue
+            if self.motifs[motif_index].name in motifSet:
+                motifSet[self.motifs[motif_index].name] = motifSet[self.motifs[motif_index].name] + 1
+            else:
+                motifSet[self.motifs[motif_index].name] = 1
+
+        return (motifSet)
+
+    def motif_lengths(self, valid_only):
+        """
+        For the motif array object return two lists about motifElement()s in MotifArray() object
+
+        Args:
+            valid_only = boolean if true the count ignores invalid motifElement()s
+
+        Returns:
+            MotifElement() object names list
+            MotifElement() object length list
+
+        """
+        listNames = []
+        listLengths = []
+
+        for motif_index in range(len(self.motifs)):
+            if valid_only and not self.motifs[motif_index].valid_flag:
+                continue
+            listNames.append(self.motifs[motif_index].name)
+            listLengths.append(self.motifs[motif_index].positions)
+
+        return (listNames, listLengths)
 
     def motif_match(self, baseline_p, ref_seq, var_seq, wing_l):
         """
@@ -160,7 +278,7 @@ class MotifArray:
 
         return matches
 
-    def motif_match_int(self, baseline_p, ref_seq, var_seq, wing_l):
+    def motif_match_int(self, baseline_p, ref_seq, var_seq, wing_l, negative):
         """
         Takes a reference and variant sequence integer representation,
         then checks for matches in the motif set.
@@ -177,6 +295,9 @@ class MotifArray:
             wing_l = Integer length of sequence of bases flanking the variant
                 (generally >= self.max_positions, should match value used to
                 create ref_seq and var_seq)
+            negative = boolean, if true, mark matched motif names with dash
+                used to indicate at reverse complement match. ie -TF_NAME
+
 
         Returns: A list of MotifMatch objects
 
@@ -185,8 +306,8 @@ class MotifArray:
 
         # scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
-        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False, negative)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False, negative)
 
         matches = []    # list of MotifMatch objects
 
@@ -220,6 +341,8 @@ class MotifArray:
         filtered on thresholds the function prints all comma separated scores
         one line for variant set and one line for reference set
 
+        note: does not flag negative matches as motif_match_int can
+
         column 1 is code for variant or reference
 
         Takes a reference and variant sequence integer representation,
@@ -245,8 +368,8 @@ class MotifArray:
 
         # 1. scoring returns: motif match array with the form
         #    (id, name, threshold, max_score, match_seq)
-        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False)
-        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False)
+        scored = self.motif_scores_int(baseline_p, var_seq, wing_l, False, False)
+        r_scored = self.motif_scores_int(baseline_p, ref_seq, wing_l, False, False)
 
         # 2. open the file
         write_header = False
@@ -420,7 +543,7 @@ class MotifArray:
 
         return scores
 
-    def motif_scores_int(self, baseline_p, sequence_int, wing_l, normalize):
+    def motif_scores_int(self, baseline_p, sequence_int, wing_l, normalize, negative):
         """
         Calculate if any motifs in the motif list match the given sequence.
         Requires that no motif have a length of 0.
@@ -436,6 +559,8 @@ class MotifArray:
             normalize = boolean, if true then divide score by motif length
                 concern: if not normalized, longer motifs can generate higher
                 scores by length not true matches.
+            negative = boolean, if true, mark matched motif names with dash
+                used to indicate at reverse complement match. ie -TF_NAME
 
         Returns:
             matches = array of scores of the form:
@@ -493,7 +618,11 @@ class MotifArray:
 
             # debug print("Max match score:"+str(max_score)+" for motif "+name+" and
             # sequence "+match_seq+".")
-            tupl = (motif_element.id, motif_element.name,
+            if negative:
+                tupl = (motif_element.id, '-' + motif_element.name,
+                    motif_threshold, max_score, match_seq, motif_index)
+            else:
+                tupl = (motif_element.id, motif_element.name,
                     motif_threshold, max_score, match_seq, motif_index)
             scores.append(tupl)
 
@@ -1136,7 +1265,7 @@ class MotifMatch:
 # ______ START METHODS RELATED TO THE CLASS BUT NOT TIED TO IT _____
 #    many could be made part of MotifArray or MotifElement
 
-def get_motifs(motif_filename, pc, default_th, base_pr):
+def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     """
     Read file containing the set of motif TF. Read from frequency matrix file.
     Computes and returns probability matrices for each motif TF except
@@ -1153,6 +1282,8 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
             [ PrA, PrC, PrG, PrT ]
             ** Currently unused by this method
                 but could be used to return a pssm instead of a pwm
+        force_unique (boolean): if True (default), calls element_overlap_rename
+            prior to returning MotifArray object
 
     Returns:
         MotifArray object = set of Motif sequences as MotifElement objects
@@ -1252,10 +1383,12 @@ def get_motifs(motif_filename, pc, default_th, base_pr):
 
     #print(("get_motifs read " + format(added_count) + " motifs from " + format(motif_filename)))
     #print(("before return set " + format(motif_set.element_positions_list(True))))
+    if force_unique:
+        motif_set.element_overlap_rename()
+
     return motif_set
 
-
-def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
+def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     """
     Read in motif file, modify defined thresholds in place and output updated file
     Based on thresholds.py::output_motifs.
@@ -1280,7 +1413,6 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     idx = 0
 
     with open(input_f) as f:
-
         # JASPAR motif file has >id                        name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
         iden = "No id found"

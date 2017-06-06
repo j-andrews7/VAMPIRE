@@ -22,6 +22,12 @@ Args:
         be included in the bed output? False by default, set to True if wanted.
     -iv (bool, optional): Should variants that don't significantly alter a locus's activity be included in the
         vcf output? False by default, set to True if wanted.
+    -da (integer, optional): If > 0 then break activity items on _,
+        return only unique part of name.
+        code assumes either start or end is unique based on unique set size
+        once dropped reruns comparison to the vcf samples
+        if 1 (default): only runs if prior vcf comparison results in no overlap
+        if 2: runs no matter what
 """
 
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
@@ -224,15 +230,16 @@ class Locus(object):
         Create list of output lines for given Locus object.
 
         Args:
-            include_bed (bool): True if variants that don't pass the z-score threshold for any Locus should excluded
-                from output. False if they should be included.
-            filter_num (int): Number of samples the must meet z-score threshold for Variant to be included in output.
+            include_bed (bool): True if variants that don't pass the z-score threshold
+                for any Locus should excluded from output. False if they should be included.
+            filter_num (int): Number of samples the must meet z-score threshold
+                for Variant to be included in output.
 
         Returns:
             output (list of str): List of lines for Locus in appropriate BED-like format.
                 or
-            None: If include_bed is True and Locus doesn't contain any Variants that hit z-score threshold for any
-                sample.
+            None: If include_bed is True and Locus doesn't contain any Variants
+                that hit z-score threshold for any sample.
         """
         output = []
         chrom = self.pos.chrom
@@ -314,16 +321,19 @@ def compare_samples(act_samples, vcf_samples):
     """
     Compare samples from activity file and vcf file.
 
-    Return only samples in both as a list and delete those not found in both from the act_samples dict.
+    Return only samples in both as a list and delete those not found in both
+    from the act_samples dict.
 
     Args:
         act_samples (dict): {(act_sample_names (str)): sample_indices (int)}
         vcf_samples (list of str): List of samples found in VCF file.
 
     Returns:
-        common_samps (list of str): List of names of samples found in both the activity file and VCF file.
-        valid_act_samps (dict): Dict of {sample_names (str): activity file data column index (int)} for samples found
-            in both the activity file and VCF file.
+        common_samps (list of str): List of names of samples found in
+            both the activity file and VCF file.
+        valid_act_samps (dict): Dict of {sample_names (str): activity file
+            data column index (int)} for samples found in
+            both the activity file and VCF file.
     """
     common_samps = list(set(list(act_samples)) & set(vcf_samples))
     valid_act_samples = {}
@@ -414,28 +424,35 @@ def reduce_activity_names(act_samps, split_string="_"):
         return (act_samps_rebuild)
 
 
-def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False, include_vcf=False,
-         drop_act_=1):
+def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_bed=False,
+    include_vcf=False, drop_act_=1):
     """
-    Compare activity of loci for samples harboring a variant within a given locus to those samples that do not.
+    Compare activity of loci for samples harboring a variant within a
+    given locus to those samples that do not.
 
-    For a given motif annotated VCF file (already run through motifs.py) and a bed-like file for loci of interest and
-    some value for each loci for each sample, find loci that overlap a variant and compare the value of samples with
-    the variant to those without the variant. Report z-scores for each loci overlapped in an output VCF and report the
-    variants for each loci in a bed-like, loci-centric output file as well.
+    For a given motif annotated VCF file (already run through motifs.py) and a
+    bed-like file for loci of interest and some value for each loci for each
+    sample, find loci that overlap a variant and compare the value of samples with
+    the variant to those without the variant. Report z-scores for each loci
+    overlapped in an output VCF and report the variants for each loci in a
+    bed-like, loci-centric output file as well.
 
     Args:
         vcf_file (str): Path to sorted variant file to process.
         act_file (str): Path to activity 'bed' file.
         out_vcf (str): Path to VCF output file to be created.
         out_bed (str): Path to loci output file to be created.
-        thresh (float, optional): Z-score magnitude that must be met for variants/loci to be reported to output.
-        filter_num (int, optional): Set number of samples that must meet z-score threshold for locus to be reported to
-            bed output file. So this number of samples must have the variant and be significantly affected by it.
-        include_bed (bool, optional): True if loci should be reported in the bed output even if they don't have a
-            variant in them that significantly affects their activity.
-        include_vcf (bool, optional): True if variants should be reported in the VCF output even if they don't lie in
-            a Locus and significantly affect its activity.
+        thresh (float, optional): Z-score magnitude that must be met for
+            variants/loci to be reported to output.
+        filter_num (int, optional): Set number of samples that must meet z-score
+            threshold for locus to be reported to bed output file. So this number
+            of samples must have the variant and be significantly affected by it.
+        include_bed (bool, optional): True if loci should be reported in the
+            bed output even if they don't have a variant in them that
+            significantly affects their activity.
+        include_vcf (bool, optional): True if variants should be reported in the
+            VCF output even if they don't lie in a Locus and significantly affect
+            its activity.
         drop_act_ (integer, optional): If > 0 then break activity items on _,
             return only unique part of name.
             code assumes either start or end is unique based on unique set size
@@ -445,6 +462,9 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
     """
     print("Parsing activity data file: " + timeString() + ".")
     act_samps, act_data = parse_activity_file(act_file)
+
+    thresh = float(thresh)
+    filter_num = int(filter_num)
 
     output_vcf = open(out_vcf, "w")
     output_bed = open(out_bed, "w")
@@ -566,8 +586,8 @@ def main(vcf_file, act_file, out_vcf, out_bed, thresh=0, filter_num=0, include_b
 
     print("Filtering loci and creating BED output.")
     print("CHR", "START", "END", "ID", "VARIANT", "Z_SCORES", "NUM_PASS_THRESH", "COMMON_VAR_SAMPS",
-          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS", "ALL_VAR_SAMPS", "NUM_ALL_VAR_SAMPS",
-          "ALL_REF_SAMPS", "NUM_COMMON_REF_SAMPS"
+          "NUM_COMMON_VAR_SAMPS", "COMMON_REF_SAMPS", "NUM_COMMON_REF_SAMPS",
+          "ALL_VAR_SAMPS", "NUM_ALL_VAR_SAMPS", "ALL_REF_SAMPS", "NUM_COMMON_REF_SAMPS"
           "MOTIF_INFO", sep="\t", file=output_bed)
     for item in loci_out:
 
@@ -590,6 +610,7 @@ if __name__ == '__main__':
     parser.add_argument("-fan", "--filter_act_num", dest="filter_a_n", required=False, default=0)
     parser.add_argument("-ib", "--include_bed", action="store_true", required=False)
     parser.add_argument("-iv", "--include_vcf", action="store_true", required=False)
+    parser.add_argument("-da", "--drop_activity_", dest="drop_activity_", required=False, default=1)
 
     args = parser.parse_args()
 
@@ -597,9 +618,11 @@ if __name__ == '__main__':
     act_file = args.activity_file
     vcf_out = args.output_vcf
     bed_out = args.output_bed
-    th = float(args.threshold)
-    filter_bed_num = int(args.filter_a_n)
+    th = args.threshold
+    filter_bed_num = args.filter_a_n
     include_bed = args.include_bed
     include_vcf = args.include_vcf
+    drop_act_ = args.drop_activity_
 
-    main(inp_file, act_file, vcf_out, bed_out, th, filter_bed_num, include_bed, include_vcf)
+    main(inp_file, act_file, vcf_out, bed_out, th, filter_bed_num, include_bed,
+        include_vcf, drop_act_)

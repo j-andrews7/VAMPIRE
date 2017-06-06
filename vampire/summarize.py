@@ -1,9 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-For a VEGAS'd VCF file, calculate a distance score for each motif delta score, ChIP z-score, and gene expression
-z-score set for each variant. These values will be plotted in 3 dimensional space. Additionally, simple bed-like files
-are provided as output. One contains the scores for all motif, ChIP z-score, and gene expression z-score sets for all
-variants. An optional second contains only those sets that meet the distance score threshold as defined by the user.
+For a VAMPIRE'd VCF file, calculate a distance score for each motif delta score,
+ChIP z-score, and gene expression z-score set for each variant. These values
+will be plotted in 3 dimensional space. Additionally, simple bed-like files
+are provided as output. One contains the scores for all motif, ChIP z-score, and
+gene expression z-score sets for all variants. An optional second contains only
+those sets that meet the distance score threshold as defined by the user.
 A third will report the sets for the top 100 distance scores.
 
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
@@ -85,17 +87,23 @@ class Variant(object):
 
     def parse_info_fields(self):
         """
-        Get names of samples containing variant and motif INFO fields from a variant record's INFO fields.
+        Get names of samples containing variant and motif INFO fields from a
+        variant record's INFO fields.
 
         Args:
             self (Variant): Variant object.
 
-        Return:
-            common_samples (dict of tuple): List of samples that had variant called and have loci and expression data.
-            motif_fields (list of str): List of INFO fields for variant that contain MOTIF related information.
-            exp_fields (list of str): List of INFO fields for variant that contain Expression related information.
-            act_fields (list of str): List of INFO fields for variant that contain Activity/Loci related information.
-            genes (list of str): List of INFO fields for variant that contain MOTIF related information.
+        Returns:
+            common_samples (dict of tuple): List of samples that had variant
+                called and have loci and expression data.
+            motif_fields (list of str): List of INFO fields for variant that
+                contain MOTIF related information.
+            exp_fields (list of str): List of INFO fields for variant that
+                contain Expression related information.
+            act_fields (list of str): List of INFO fields for variant that
+                contain Activity/Loci related information.
+            genes (list of str): List of INFO fields for variant that
+                contain MOTIF related information.
         """
         act_samples = None
         exp_samples = None
@@ -142,12 +150,13 @@ class Variant(object):
 
     def get_motif_scores(self):
         """
-        Return the difference between reference and variant scores for each motif the variant matches
-        as a dictionary of {motif_name: (variant - reference log likelihood ratios)}.
+        Returns the difference between reference and variant scores for each
+        motif the variant matches as a dictionary of:
+            {motif_name: (variant - reference log likelihood ratios)}.
 
-        Return:
+        Returns:
             motifs (dict of floats): {motif_name: (variant_score, ref_score,
-                                                  (variant - reference log likelihood ratios))}
+                               (variant - reference log likelihood ratios))}
         """
 
         # List of lists [[field_name1, data1], [field_name2, data2]...]
@@ -173,11 +182,13 @@ class Variant(object):
 
     def get_sample_data(self):
         """
-        Parse and return the gene expression and loci activity z-scores for variant samples.
+        Parses and returns the gene expression and loci activity z-scores
+        for variant samples.
 
-        Return:
-            sample_data (list of lists of str): [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
-                                                 [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
+        Returns:
+            sample_data (list of lists of str):
+                [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
+                [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
         """
 
         samples = self.common_samples
@@ -226,10 +237,12 @@ class Variant(object):
 
     def get_variant_summary(self):
         """
-        Create a list of summary output fields for a given Variant as well as its distance metrics for plotting.
+        Create a list of summary output fields for a given Variant as well as
+        its distance metrics for plotting.
 
-        Return:
-            output_fields (list of lists of str): List of lists of output fields for the Variant.
+        Returns:
+            output_fields (list of lists of str): List of lists of output
+                fields for the Variant.
         """
         var_info = [self.pos.chrom, self.pos.start, self.ref_allele, self.var_allele]
         motif_info = self.motif_scores
@@ -287,11 +300,12 @@ def calc_distance(score_array):
 
 def plot_distances(df, out_prefix):
     """
-    Plot distance scores calculated for the delta var/ref motif log-odds ratios, activity z-score, and gene expression
-    z-score sets for each variant.
+    Plot distance scores calculated for the delta var/ref motif log-odds ratios,
+    activity z-score, and gene expression z-score sets for each variant.
 
     Args:
-        df (pandas Dataframe) = Dataframe containing all variant, distance metric, and sample info. One record per row.
+        df (pandas Dataframe) = Dataframe containing all variant, distance
+            metric, and sample info. One record per row.
         out_prefix (str) = Prefix to use for plot outputs.
     """
 
@@ -359,9 +373,8 @@ def plot_distances(df, out_prefix):
     )
 
     fig = go.Figure(data=data, layout=layout)
-    plotly.offline.plot(fig, filename=out_prefix + '.html', auto_open=False, image="png", image_filename=out_prefix)
-
-    return
+    plotly.offline.plot(fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix)
 
 
 def scale_and_frame(all_output):

@@ -73,7 +73,6 @@ def main(motif_file, motif_outfile, d_th, pc, bp, ow, fpr, pe):
 
     print(("Done (" + timeString() + ")"))
 
-
 if __name__ == '__main__':
 
     parser.add_argument("-m", "--motif", dest="motif_file", required=True)

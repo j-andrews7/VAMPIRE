@@ -22,9 +22,11 @@ Args:
         if blank and -m then creates .tf_filtered version of motif.txt file
     -th (optional) <5>: TFs are considered expressed if they are above this threshold.
 """
+from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
+
 import sys
 import argparse
-
+import time
 import motif
 
 
@@ -106,7 +108,8 @@ def process_line(line, gene_dict, thresh):
 
     Args:
         line (str): Line to parse.
-        gene_dict (dict): Dict with gene names as keys and expression values for samples in vcf as values.
+        gene_dict (dict): Dict with gene names as keys and expression values
+            for samples in vcf as values.
         thresh (float): Expression threshold that TFs must meet to be included in output.
     Returns:
         modified version of input line
@@ -131,12 +134,13 @@ def process_line(line, gene_dict, thresh):
                 del motifns[i]
 
         # Create dict from other motif fields.
-        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=") or field.startswith("MOTIFC=")):
+        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=")
+                or field.startswith("MOTIFC=")):
             name = field[:7]
             values = field[7:].split(',')
             motif_other[name] = values
-        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=") or field.startswith("MOTIFVG=") or
-              field.startswith("MOTIFRG=")):
+        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=")
+                or field.startswith("MOTIFVG=") or field.startswith("MOTIFRG=")):
             name = field[:8]
             values = field[8:].split(',')
             motif_other[name] = values
@@ -190,7 +194,6 @@ def get_genes(exp_file, samples, threshold, max_only):
     gene_dict = {}
 
     print('Reading expression file:' + format(exp_file))
-
     if max_only:
         # read and only return max exp value in gene_dict
         with open(exp_file) as f:
@@ -233,7 +236,7 @@ def get_genes(exp_file, samples, threshold, max_only):
     return gene_dict
 
 
-def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", use_vcf=True):
+def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None):
     """
         If use_vcf true then:
             For a given motif annotated vcf file (already run through motifs.py),
@@ -245,12 +248,30 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
             not expressed in at least one sample above the threshold
 
         Args:
-            -i (str): Name of sorted variant file to process.
-            -o (str): Name of output file to be created.
-            -e (str): Name of expression file.
-            -th (float): TFs are considered expressed if they are above this threshold.
-    """
+            inp_file (str): Name of sorted variant file to process.
+            exp_file (str): Name of expression file.
+            out_file (str): Name of output file to be created.
+            th (float): TFs are considered expressed if they are above this threshold.
+            motif_file (-m, str): Tab-delimited key file containing a frequency
+                matrix with each row corresponding to a base and each column
+                corresponding to a position (JASPAR format).
+                If specified ignores input.vcf and output.vcf
+                sets vcf_true: see above
+            motifout_file (-mo,str): Name of output motif file to be created.
+                if None -m creates .tf_filtered version of motif.txt file
 
+    """
+    # -- pre-processing passed variables
+    if motif_file is not None:
+        if motifout_file is None:
+            motifout_file = motif_file.replace('.txt', '.tf_filtered.txt')
+        use_vcf = False
+    else:
+        use_vcf = True
+        motif_file = None
+        motifout_file = None
+
+    # -- start function in earnest
     if use_vcf:
         output_f = open(out_file, "w")
 
@@ -277,7 +298,8 @@ def main(inp_file, exp_file, out_file, th=5, motif_file="", motifout_file="", us
                 sys.exit()
 
             print("Filtering motif info for TFs that don't meet the expression threshold of " +
-                  str(th) + ". Found " + format(len(gene_dict)) + " genes. Start processing vcf file.")
+                str(th) + ". Found " + format(len(gene_dict)) +
+                " genes. Start processing vcf file.")
             for line in vcf:
                 new_line = process_line(line, gene_dict, th)
                 if new_line is not None:
@@ -322,10 +344,13 @@ if __name__ == '__main__':
 
     parser.add_argument("-i", "--input", dest="input_file", required=True)
     parser.add_argument("-e", "--expression", dest="exp_file", required=True)
-    parser.add_argument("-m", "--motif_input", dest="motif_file", required=False)
-    parser.add_argument("-mo", "--motif_output", dest="motif_out_file", required=False)
+    parser.add_argument("-m", "--motif_input", dest="motif_file",
+        required=False, default=None)
+    parser.add_argument("-mo", "--motif_output", dest="motif_out_file",
+        required=False, default=None)
     parser.add_argument("-o", "--output", dest="output_file", required=True)
-    parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=5, type=float)
+    parser.add_argument("-th", "--threshold", dest="threshold",
+        required=False, default=5, type=float)
 
     args = parser.parse_args()
 
@@ -333,13 +358,7 @@ if __name__ == '__main__':
     exp_file = args.exp_file
     out_file = args.output_file
     th = args.threshold
+    motif_file = args.motif_file
+    motifout_file = args.motif_out_file
 
-    if args.motif_file is not None:
-        motif_file = args.motif_file
-        if args.motif_out_file is not None:
-            motifout_file = args.motif_out_file
-        else:
-            motifout_file = motif_file.replace('.txt', '.tf_filtered.txt')
-        main(inp_file, exp_file, out_file, th, motif_file, motifout_file, False)
-    else:
-        main(inp_file, exp_file, out_file, th, None, None, True)
+    main(inp_file, exp_file, out_file, th, motif_file, motifout_file)

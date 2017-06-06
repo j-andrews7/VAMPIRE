@@ -55,13 +55,12 @@ from __future__ import print_function    # so Ninja IDE will stop complaining & 
 import sys
 import argparse
 #import pdb    # necessary for debugger; use pdb.set_trace()
-import motif
-import sequence
-import vcf
-from utils import timeString
+from . import motif
+from . import sequence
+from . import vcf
+from .utils import timeString
 
 from pyfaidx import Fasta
-
 
 # TODO - Remove use of this, will only create headaches later.
 class Options_list:
@@ -390,7 +389,7 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
                     for trans_factor in ptfs:
                         # If the transcription factor (chip peak) name is the same as
                         # the matched motif name, note that there is a chip match
-                        if trans_factor == matches[motif_idx].name:
+                        if trans_factor == matches[motif_idx].name or trans_factor == matches[motif_idx].name.strip('-'):
                             # Motif match is verified by ChIP data
                             matches[motif_idx].chip_match = True
                 # Save with new value for pmms
@@ -631,11 +630,38 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
 
     print("Run started at:" + timeString())
     # --------------------------------------------------------------------------------------
+    # -- pre-processing passed variables
     # handling arguments --> XXX:change all strings to opt_args print string
-
     fileHan_chip = None
     fileHan_out_chip = None
     filter_bed = False    # true if file_chip and filter_co
+
+    if run_homotypic is None:
+        run_homotypic = False
+    else:
+        if run_homotypic is not False:
+            run_homotypic = True
+
+    if force_ref_match is None:
+        force_ref_match = False
+    else:
+        if force_ref_match is not False:
+            force_ref_match = True
+
+    # Are input files chr sorted lexicographically (by karyotype order)?
+    # Input vcf file and chip bed file must be sorted the same way
+    # -sk sets this to True (means sorted lexicographically)
+    if sorted_lex is None:
+        sorted_lex = True
+    else:
+        if sorted_lex is not True:
+            sorted_lex = False
+
+    if filter_co is None:
+        filter_co = False
+    else:
+        if filter_co is not False:
+            filter_co = True
 
     if pc is not None:
         pc = float(pc)
@@ -915,7 +941,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print("\tref int: " + format(ref_seq) +
               "\n\tvar int: " + format(var_seq))
         print("start motif_match_int")
-        plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l)
+        plusmatch = motif_set.motif_match_int(bp, ref_seq, var_seq, wing_l, False)
         #     plusmatch returns an list of MotifMatch objects
         # 5. Add local environment data:
         print("start process_local_env_int")
@@ -928,7 +954,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print("\tref rc int: " + format(ref_seq_rc) +
               "\n\tvar rc int: " + format(var_seq_rc))
         print("start motif_match_int reverse complement")
-        minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l)
+        minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l, True)
         # 7. Add local environment data
         print("start process_local_env_int reverse complement")
         minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,
@@ -960,7 +986,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         print()"""
 
         # Co-binding transcription factors currently not implemented
-        cb_dict = None    # QQQ: does what? Why was it here originally?
+        #cb_dict = None    # QQQ: does what? Why was it here originally?
 
         # Create the correct line in VCF format and print to file_output
         update_vcf(var_element.vcf_line, matches, fileHan_output, options)
@@ -1026,25 +1052,18 @@ if __name__ == '__main__':
     pc = float(args.pseudocounts)
     ws = int(args.wing_size)
     th = float(args.threshold)
+    run_homotypic = args.homotypic_run
+    force_ref_match = args.force_ref_match
 
     multivar_distance = args.multi_var
-
-    if args.homotypic_run is None:
-        run_homotypic = False
-    else:
-        run_homotypic = True
-
-    if args.force_ref_match is None:
-        force_ref_match = False
-    else:
-        force_ref_match = True
 
     # Are input files chr sorted lexicographically (by karyotype order)?
     # Input vcf file and chip bed file must be sorted the same way
     # -sk sets this to True (means sorted lexicographically)
-    sorted_lex = (args.kary_sort is None)
+    sorted_lex = (args.kary_sort is None)    # handled by main logic
 
-    filter_co = (args.filter_co is not None)    # sets filter_bed if file_chip
+    filter_co = (args.filter_co is not None)    # sets filter_bed if file_chip; main logic handles
+
     filter_motif = args.filter_motif
     filter_chip = args.filter_chip
     filter_novel = args.filter_novel

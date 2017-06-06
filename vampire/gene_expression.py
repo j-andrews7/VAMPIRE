@@ -388,6 +388,7 @@ def main(vcf_file, exp_file, out_vcf, thresh=0, size=50000, include_vcf=False, e
                         if current_var.pos.chrom != item.pos.chrom:
                             continue
                         elif current_var.pos.overlaps_wings(item.pos):
+
                             loci_ovlp_var.append(item)
                     break
 
