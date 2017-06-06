@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-utils.py contains object classes and other related methods.
-Does NOT contain a main function.
+utils.py contains generic object classes and other related functions.
 
-Intended to be imported with motifs.py and other for related functionality.
-
-XXX|YYY: note incomplete.
+Intended to be imported to reduce code redundancy and streamline code maintenance.
 """
 
 import time
+
+import readline  # Often necessary for rpy2 to work properly.
+import rpy2.robjects as robjects
+import rpy2.robjects.packages as rpackages
 
 
 class Position(object):
@@ -30,7 +31,27 @@ class Position(object):
 
     def overlaps(self, pos_b):
         """
-        Return whether self overlaps Position pos_b's wings.
+        Return whether self overlaps Position pos_b's start and end.
+
+        Args:
+            pos_b (Position): Another Position.
+
+        Returns:
+            bool: True if self overlaps with Position pos_b. False if not.
+        """
+        if pos_b is None:
+            return False
+
+        if self.chrom != pos_b.chrom:
+            return False
+
+        start1, start2, end1, end2 = (self.start, pos_b.start, self.end, pos_b.end)
+
+        return end1 >= start2 and end2 >= start1
+
+    def overlaps_wings(self, pos_b):
+        """
+        Return whether self overlaps Position pos_b's start and end.
 
         Args:
             pos_b (Position): Another Position.
@@ -71,6 +92,21 @@ class Position(object):
 
 
 def timeString():
-    """ Return time as a string YearMonthDay.Hour.Minute.Second
+    """
+    Return time as a string YearMonthDay.Hour.Minute.Second
     """
     return time.strftime('%Y%m%d.%H:%M:%S')
+
+
+def check_r_install(package):
+    """
+    Check if an R package is installed and attempt to install if not.
+    """
+    if not robjects.packages.isinstalled(package):
+        print(package + " R package not found.\nAttempting to install " + package + " R package.")
+        utils = rpackages.importr('utils')
+        utils.chooseCRANmirror('http://cran.wustl.edu/')
+        utils.install_packages(package)
+        print("Installation complete.")
+
+    return

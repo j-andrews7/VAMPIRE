@@ -62,10 +62,6 @@ from .utils import timeString
 
 from pyfaidx import Fasta
 
-
-parser = argparse.ArgumentParser(usage=__doc__)
-
-
 # TODO - Remove use of this, will only create headaches later.
 class Options_list:
 
@@ -1073,8 +1069,7 @@ if __name__ == '__main__':
     filter_novel = args.filter_novel
 
     main(file_input, file_output, file_reference_genome, file_motif, file_baseline_prob,
-        pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
-        file_chip, file_output_chip, filter_co, sorted_lex,
-        filter_chip, filter_motif, filter_novel
-    )
-
+         pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
+         file_chip, file_output_chip, filter_co, sorted_lex,
+         filter_chip, filter_motif, filter_novel
+         )

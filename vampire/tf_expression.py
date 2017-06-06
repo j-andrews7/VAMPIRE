@@ -22,7 +22,6 @@ Args:
         if blank and -m then creates .tf_filtered version of motif.txt file
     -th (optional) <5>: TFs are considered expressed if they are above this threshold.
 """
-
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 
 import sys
@@ -194,8 +193,7 @@ def get_genes(exp_file, samples, threshold, max_only):
     data_cols = []
     gene_dict = {}
 
-    print('start read exp_file:' + format(exp_file))
-
+    print('Reading expression file:' + format(exp_file))
     if max_only:
         # read and only return max exp value in gene_dict
         with open(exp_file) as f:
@@ -334,7 +332,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
             sys.exit()
 
         print("Filtering motif info for TFs that don't meet the expression threshold of " +
-            str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
+              str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
 
         motif.get_filterbygene_put_motifs(motif_file, motifout_file, th, gene_dict)
 
