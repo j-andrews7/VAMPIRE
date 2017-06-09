@@ -26,7 +26,6 @@ from __future__ import print_function    # so Ninja IDE will stop complaining & 
 
 import sys
 import argparse
-import time
 import motif
 
 
@@ -75,7 +74,7 @@ def filter_motifs(motifs, gene_dict, thresh):
 
         try:
             # TODO - Try to handle complexes and such - 'ATX::TCF3', etc.
-            exp_vals = gene_dict[item]    # this is the line that must be in try
+            exp_vals = gene_dict[item.split("_")]    # Handle possible additional index after motif name.
 
             # Check if any of the expression values meet the threshold.
             for x in exp_vals:
@@ -134,13 +133,13 @@ def process_line(line, gene_dict, thresh):
                 del motifns[i]
 
         # Create dict from other motif fields.
-        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=")
-                or field.startswith("MOTIFC=")):
+        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=") or
+                field.startswith("MOTIFC=")):
             name = field[:7]
             values = field[7:].split(',')
             motif_other[name] = values
-        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=")
-                or field.startswith("MOTIFVG=") or field.startswith("MOTIFRG=")):
+        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=") or
+                field.startswith("MOTIFVG=") or field.startswith("MOTIFRG=")):
             name = field[:8]
             values = field[8:].split(',')
             motif_other[name] = values
@@ -298,8 +297,8 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
                 sys.exit()
 
             print("Filtering motif info for TFs that don't meet the expression threshold of " +
-                str(th) + ". Found " + format(len(gene_dict)) +
-                " genes. Start processing vcf file.")
+                  str(th) + ". Found " + format(len(gene_dict)) +
+                  " genes. Start processing vcf file.")
             for line in vcf:
                 new_line = process_line(line, gene_dict, th)
                 if new_line is not None:
@@ -344,13 +343,19 @@ if __name__ == '__main__':
 
     parser.add_argument("-i", "--input", dest="input_file", required=True)
     parser.add_argument("-e", "--expression", dest="exp_file", required=True)
-    parser.add_argument("-m", "--motif_input", dest="motif_file",
-        required=False, default=None)
-    parser.add_argument("-mo", "--motif_output", dest="motif_out_file",
-        required=False, default=None)
+    parser.add_argument(
+        "-m", "--motif_input", dest="motif_file",
+        required=False, default=None
+    )
+    parser.add_argument(
+        "-mo", "--motif_output", dest="motif_out_file",
+        required=False, default=None
+    )
     parser.add_argument("-o", "--output", dest="output_file", required=True)
-    parser.add_argument("-th", "--threshold", dest="threshold",
-        required=False, default=5, type=float)
+    parser.add_argument(
+        "-th", "--threshold", dest="threshold",
+        required=False, default=5, type=float
+    )
 
     args = parser.parse_args()
 

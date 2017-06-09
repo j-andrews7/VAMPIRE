@@ -373,8 +373,10 @@ def plot_distances(df, out_prefix):
     )
 
     fig = go.Figure(data=data, layout=layout)
-    plotly.offline.plot(fig, filename=out_prefix + '.html',
-        auto_open=False, image="png", image_filename=out_prefix)
+    plotly.offline.plot(
+        fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix
+    )
 
 
 def scale_and_frame(all_output):
