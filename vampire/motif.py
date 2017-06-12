@@ -85,7 +85,7 @@ class MotifArray:
         """
         Rename non-unique MotifElement names by adding an index
             oldName
-            newName__1     --or--   newName__<append_string>1
+            newName_1     --or--   newName_<append_string>1
         Assumes index will not suddenly overlap with another previously
         existing motif. Could iteratively check...
 
@@ -102,10 +102,10 @@ class MotifArray:
 
         if append_string is not None:
             # use an append string
-            append_string = '__' + append_string
+            append_string = '_' + append_string
         else:
             # do use an append string
-            append_string = '__'
+            append_string = '_'
 
         inf_loop_break = 0
         while (len(notUnique) > 0 and inf_loop_break < 5):
@@ -1388,6 +1388,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
 
     return motif_set
 
+
 def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     """
     Read in motif file, modify defined thresholds in place and output updated file
@@ -1483,6 +1484,7 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
 
     output_fh = open(output_f, "w")
     idx = 0
+    skipped = set()
 
     with open(input_f) as f:
 
@@ -1498,10 +1500,11 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
             # First line contains id, name and threshold; only check name
             if i == 0:
                 name = line.split()[1]
+                strict_name = name.split("_")[0]  # Make sure motif index doesn't affect lookup.
                 output_line = False    # reset to false (default)
                 # handle gene matching
                 try:
-                    exp_vals = gene_dict[name]    # this is the line that must be in try
+                    exp_vals = gene_dict[strict_name]    # this is the line that must be in try
                     # Check if any of the expression values meet the threshold.
                     if type(exp_vals) == float:
                         if exp_vals >= threshold:
@@ -1525,7 +1528,10 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
             # Output motif and continue (there are 2 newlines between motifs)
             if output_line:
                 print(line.strip(), file=output_fh)
-
+            else:
+                skipped.add(name)
+    for x in skipped:
+        print(x + " removed from motif file due to not meeting expression threshold or missing from file.")
     output_fh.close()
     return
 

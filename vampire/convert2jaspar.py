@@ -10,10 +10,12 @@ Args:
     -o (str):
         Name of output file.
     -t (str):
-        Input motif format. Options: 'meme', 'transfac', 'encode', 'homer'
+        Input motif format. Options: 'meme', 'transfac', 'encode', 'homer', 'minmeme'
+        'MINMEME' are the .meme database files.
 """
 
 import Bio.motifs as bmotifs
+from Bio.motifs import jaspar
 import argparse
 import numpy as np
 import sys
@@ -23,11 +25,10 @@ def convert_meme(input_file, output_file):
     """
     Convert file of MEME motifs to JASPAR (2016) format.
     """
-    print("Converting from MEME to JASPAR format.")
     with open(input_file) as f:
         motifs = []
         for m in bmotifs.parse(f, "MEME"):
-            motifs.append(bmotifs.jaspar.write(m, "JASPAR"))
+            motifs.append(bmotifs.write(m, "JASPAR"))
 
     out_file = open(output_file, "w")
     print("\n".join(motifs), file=out_file)
@@ -36,18 +37,67 @@ def convert_meme(input_file, output_file):
     return
 
 
+def convert_min_meme(input_file, output_file):
+    """
+    Convert file of MEME motifs to JASPAR (2016) format.
+    """
+    with open(input_file) as f:
+        info = ""
+        pfm = []
+        first = True  # Keep track of first line.
+        out_file = open(output_file, "w")
+
+        for line in f:
+            if line.startswith("MOTIF"):
+                if not first:
+                    print(info, file=out_file)
+                    pfm = np.array(pfm)
+                    out_pfm = np.transpose(pfm)  # Permute columns to rows.
+                    out = ["\t".join(x) for x in out_pfm]
+                    print("\n".join(out), file=out_file)
+                    pfm = []  # Make new empty list.
+                name_id = line.strip().split()
+                name = name_id[2].split("_")[0]
+                info = ">" + name_id[1] + " " + name.strip(")(")
+                first = False
+            # Skip empty and extraneous info lines.
+            elif line.strip() and not line.startswith("letter") and line.strip()[0].isdigit():
+                line = line.strip().split()
+                pfm.append(line)
+
+        print(info, file=out_file)
+        pfm = np.array(pfm)
+        out_pfm = np.transpose(pfm)  # Permute columns to rows.
+        out = ["\t".join(x) for x in out_pfm]
+        print("\n".join(out), file=out_file)
+
+        out_file.close()
+
+    return
+
+
 def convert_transfac(input_file, output_file):
     """
     Convert file of TRANSFAC motifs to JASPAR (2016) format.
     """
-    print("Converting from TRANSFAC to JASPAR format.")
+    out = ""
     with open(input_file) as f:
-        motifs = []
-        for m in bmotifs.parse(f, "TRANSFAC"):
-            motifs.append(bmotifs.jaspar.write(m, "JASPAR"))
+        mtifs = bmotifs.parse(f, "TRANSFAC")
+    for x in mtifs:
+        try:
+            x.name = x['NA']
+        except KeyError:
+            x.name = None
+
+        try:
+            x.matrix_id = x['ID']
+        except KeyError:
+            x.matrix_id = None
+
+    out = jaspar.write(mtifs, 'jaspar')
 
     out_file = open(output_file, "w")
-    print("\n".join(motifs), file=out_file)
+    print(out, file=out_file)
     out_file.close()
 
     return
@@ -57,7 +107,6 @@ def convert_encode(input_file, output_file):
     """
     Convert file of ENCODE pfm motifs to JASPAR (2016) format.
     """
-    print("Converting from ENCODE to JASPAR format.")
     with open(input_file) as f:
         info = ""
         pfm = []
@@ -70,19 +119,21 @@ def convert_encode(input_file, output_file):
                     print(info, file=out_file)
                     pfm = np.array(pfm)
                     out_pfm = np.transpose(pfm)  # Permute columns to rows.
-                    print(out_pfm, file=out_file)
+                    out = ["\t".join(x) for x in out_pfm]
+                    print("\n".join(out), file=out_file)
                     pfm = []  # Make new empty list.
                 name_id = line.strip(">").split()
-                info = ">" + name_id[1] + " " + name_id[0]
+                info = ">" + name_id[1] + " " + name_id[0].split("_")[0]
                 first = False
-            elif not line.strip():  # Skip empty lines.
+            elif line.strip():  # Skip empty lines.
                 line = line.strip().split()[1:]  # Skip first character in line for dominant base at position.
                 pfm.append(line)
 
         print(info, file=out_file)
         pfm = np.array(pfm)
         out_pfm = np.transpose(pfm)  # Permute columns to rows.
-        print(out_pfm, file=out_file)
+        out = ["\t".join(x) for x in out_pfm]
+        print("\n".join(out), file=out_file)
 
         out_file.close()
 
@@ -93,7 +144,6 @@ def convert_homer(input_file, output_file):
     """
     Convert file of HOMER pfm motifs to JASPAR (2016) format.
     """
-    print("Converting from HOMER to JASPAR format.")
     with open(input_file) as f:
         info = ""
         pfm = []
@@ -106,19 +156,21 @@ def convert_homer(input_file, output_file):
                     print(info, file=out_file)
                     pfm = np.array(pfm)
                     out_pfm = np.transpose(pfm)  # Permute columns to rows.
-                    print(out_pfm, file=out_file)
+                    out = ["\t".join(x) for x in out_pfm]
+                    print("\n".join(out), file=out_file)
                     pfm = []  # Make new empty list.
-                name_id = line.strip(">").split()[:2]  # Only want first 2 elements.
-                info = ">" + name_id[1] + " " + name_id[0]
+                name_id = line.strip(">").split()
+                info = ">" + name_id[1] + " " + name_id[0].split("_")[0]
                 first = False
-            elif not line.strip():  # Skip empty lines.
-                line = line.strip().split()
+            elif line.strip():  # Skip empty lines.
+                line = line.strip().split()[1:]  # Skip first character in line for dominant base at position.
                 pfm.append(line)
 
         print(info, file=out_file)
         pfm = np.array(pfm)
         out_pfm = np.transpose(pfm)  # Permute columns to rows.
-        print(out_pfm, file=out_file)
+        out = ["\t".join(x) for x in out_pfm]
+        print("\n".join(out), file=out_file)
 
         out_file.close()
 
@@ -135,19 +187,22 @@ def main(input_file, output_file, m_type):
         output_file (str):
             Name of output motif file (in JASPAR format).
         m_type (str):
-            Input motif formats. Valid options: 'meme', 'transfac', 'encode', 'homer'
+            Input motif formats. Valid options: 'meme', 'transfac', 'encode', 'homer', 'minmeme'
     """
 
-    if m_type is "MEME":
+    if m_type == "MEME":
         print("Converting from MEME to JASPAR format.")
         convert_meme(input_file, output_file)
-    elif m_type is "TRANSFAC":
+    if m_type == "MINMEME":
+        print("Converting from minimal MEME to JASPAR format.")
+        convert_min_meme(input_file, output_file)
+    elif m_type == "TRANSFAC":
         print("Converting from TRANSFAC to JASPAR format.")
         convert_transfac(input_file, output_file)
-    elif m_type is "ENCODE":
+    elif m_type == "ENCODE":
         print("Converting from ENCODE to JASPAR format.")
         convert_encode(input_file, output_file)
-    elif m_type is "HOME":
+    elif m_type == "HOME":
         print("Converting from HOMER to JASPAR format.")
         convert_homer(input_file, output_file)
     else:  # Should never be the case.
@@ -162,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--input", dest="inp_file", required=True)
     parser.add_argument("-o", "--output", dest="out_file", required=True)
     parser.add_argument("-m", "--motif", dest="m_type", action='store',
-                        choices=['MEME', 'TRANSFAC', 'ENCODE', 'HOMER'], required=True, type=str.upper)
+                        choices=['MEME', 'TRANSFAC', 'ENCODE', 'HOMER', 'MINMEME'], required=True, type=str.upper)
 
     args = parser.parse_args()
 
