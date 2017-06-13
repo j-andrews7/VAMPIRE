@@ -1389,7 +1389,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     return motif_set
 
 
-def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
+def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     """
     Read in motif file, modify defined thresholds in place and output updated file
     Based on thresholds.py::output_motifs.
@@ -1414,7 +1414,7 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     idx = 0
 
     with open(input_f) as f:
-        # JASPAR motif file has >id                        name \n A [ tab delineated weight array ] \n
+        # JASPAR motif file has >id  name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
         iden = "No id found"
         name = "No name found"
@@ -1581,15 +1581,15 @@ def get_baseline_probs(baseline_f):
                         return bp_array
         except ValueError:
             print(("**ERROR** Baseline probability file incorrectly formatted.\n" +
-                  "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
-                  "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
-                  "\tContinuing with default probabilities: " + format(bp_array)))
+                   "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+                   "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+                   "\tContinuing with default probabilities: " + format(bp_array)))
             return bp_array
 
         print(("**ERROR** Empty baseline probability file found.\n" +
-              "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
-              "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
-              "\tContinuing with default probabilities: " + format(bp_array)))
+               "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+               "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+               "\tContinuing with default probabilities: " + format(bp_array)))
         return bp_array
 
 

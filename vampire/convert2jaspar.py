@@ -10,7 +10,7 @@ Args:
     -o (str):
         Name of output file.
     -t (str):
-        Input motif format. Options: 'meme', 'transfac', 'encode', 'homer', 'minmeme'
+        Input motif format. Options: 'transfac', 'encode', 'homer', 'minmeme'
         'MINMEME' are the .meme database files.
 """
 
@@ -21,25 +21,25 @@ import numpy as np
 import sys
 
 
-def convert_meme(input_file, output_file):
-    """
-    Convert file of MEME motifs to JASPAR (2016) format.
-    """
-    with open(input_file) as f:
-        motifs = []
-        for m in bmotifs.parse(f, "MEME"):
-            motifs.append(bmotifs.write(m, "JASPAR"))
+# def convert_meme(input_file, output_file):
+#     """
+#     Convert file of MEME motifs to JASPAR (2016) format.
+#     """
+#     with open(input_file) as f:
+#         motifs = []
+#         for m in bmotifs.parse(f, "MEME"):
+#             motifs.append(bmotifs.write(m, "JASPAR"))
 
-    out_file = open(output_file, "w")
-    print("\n".join(motifs), file=out_file)
-    out_file.close()
+#     out_file = open(output_file, "w")
+#     print("\n".join(motifs), file=out_file)
+#     out_file.close()
 
-    return
+#     return
 
 
 def convert_min_meme(input_file, output_file):
     """
-    Convert file of MEME motifs to JASPAR (2016) format.
+    Convert file of minimal MEME motifs to JASPAR (2016) format.
     """
     with open(input_file) as f:
         info = ""
@@ -187,12 +187,12 @@ def main(input_file, output_file, m_type):
         output_file (str):
             Name of output motif file (in JASPAR format).
         m_type (str):
-            Input motif formats. Valid options: 'meme', 'transfac', 'encode', 'homer', 'minmeme'
+            Input motif formats. Valid options: 'transfac', 'encode', 'homer', 'minmeme'
     """
 
-    if m_type == "MEME":
-        print("Converting from MEME to JASPAR format.")
-        convert_meme(input_file, output_file)
+    # if m_type == "MEME":
+    #     print("Converting from MEME to JASPAR format.")
+    #     convert_meme(input_file, output_file)
     if m_type == "MINMEME":
         print("Converting from minimal MEME to JASPAR format.")
         convert_min_meme(input_file, output_file)
@@ -217,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--input", dest="inp_file", required=True)
     parser.add_argument("-o", "--output", dest="out_file", required=True)
     parser.add_argument("-m", "--motif", dest="m_type", action='store',
-                        choices=['MEME', 'TRANSFAC', 'ENCODE', 'HOMER', 'MINMEME'], required=True, type=str.upper)
+                        choices=['TRANSFAC', 'ENCODE', 'HOMER', 'MINMEME'], required=True, type=str.upper)
 
     args = parser.parse_args()
 

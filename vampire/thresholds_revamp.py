@@ -109,7 +109,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
     print(("Calculating thresholds (" + timeString() + "). This should only take a few minutes."))
     with ThreadPool(p) as pool:
         thresholds = pool.starmap(find_thresh, zip(itertools.repeat(get_thresh), matrices, itertools.repeat(pv),
-                                  itertools.repeat(r_background)))
+                                                   itertools.repeat(r_background)))
 
     print(("Total motifs read: " + str(len(thresholds))))
     print("Writing output file.")
