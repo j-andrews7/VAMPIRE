@@ -209,8 +209,8 @@ class Locus(object):
         med = median(all_scores)
         abs_score = [abs(x - med) for x in all_scores]
         mad = median(abs_score) * 1.4826
-        # 1.4826 is a constant that assumes a normal distribution to use the MAD
-        # as a consistent estimator of standard deviation.
+        # 1.4826 is a constant that assumes a normal distribution to use the MAD as a consistent estimator
+        # of standard deviation.
 
         robust_z_scores = [((x - med) / mad) for x in self.var_scores[variant]]
 

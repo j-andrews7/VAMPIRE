@@ -11,23 +11,49 @@ A third will report the sets for the top 100 distance scores.
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
 
 Args:
-    -i (str): Path to sorted variant file to process.
-    -o (str): Prefix for output files.
-    -d (float, optional): Distance magnitude threshold that must be met for
-        variants/genes to be reported to output.
+    -i (str):
+        Path to sorted variant file to process.
+    -o (str):
+        Prefix for output files.
+    -d (float, optional):
+        Distance magnitude threshold that must be met for variants/genes to be reported to output.
         Default is 0, so all variant-sample activity-gene set distances will be reported.
+    -m (str):
+        Path to motif file with counts.
+    -a (float, optional) <0.25>:
+        Background probability for A nucleotides. If not
+        provided then all are assumed to be equally likely (all are 0.25).
+    -c (float, optional) <0.25>:
+        Background probability for C nucleotides.
+    -g (float, optional) <0.25>:
+        Background probability for G nucleotides.
+    -t (float, optional) <0.25>:
+        Background probability for T nucleotides.
+    -pc (float, optional) <0.1>:
+        Pseudocounts value to be added to all positions of the motif frequency matrix before calculating
+        the probability matrix.
+    -p (int, optional) <1>:
+        Processor cores to utilize. Will decrease computation time linearly.
 """
 import argparse
+import sys
 import time
-import pandas as pd
 from math import sqrt
+from multiprocessing.dummy import Pool as ThreadPool
+import itertools
+from timeit import default_timer as timer
+import gc
 
+from Bio import motifs
+import pandas as pd
 import plotly
 import plotly.graph_objs as go
-
 import numpy as np
+import readline  # Often necessary for rpy2 to work properly.
+import rpy2.robjects as R
+from rpy2.robjects.packages import importr
 
-from .utils import Position, timeString
+import utils
 
 # YYY-JA 04/24/2017 - Hate making yet another variant (Ha) of this class.
 # Move to utils.py and make uniform across modules.
@@ -40,8 +66,8 @@ class Variant(object):
 
     def __init__(self, line):
         self.line_list = line.strip().split("\t")
-        self.pos = Position(self.line_list[0], int(self.line_list[1]),
-                            (int(self.line_list[1]) + len(self.line_list[3])))
+        self.pos = utils.Position(self.line_list[0], int(self.line_list[1]),
+                                  (int(self.line_list[1]) + len(self.line_list[3])))
         self.ref_allele = self.line_list[3]
         self.var_allele = self.line_list[4]
         self.iden = self.line_list[2]
@@ -49,7 +75,7 @@ class Variant(object):
         self.info_fields = self.line_list[7].split(";")
         (self.common_samples, self.motif_fields, self.exp_fields, self.act_fields,
             self.genes) = self.parse_info_fields()
-        self.motif_scores = self.get_motif_scores()  # Calculate delta motif scores and place into a dict.
+        self.motif_scores = self.get_motif_scores()  # Get var, ref, and diff motif scores and place into a dict.
         self.sample_data = self.get_sample_data()  # Parse all combos of gene expression and loci activity data.
 
         self.output = self.get_variant_summary()  # Get output lines as a list of lists.
@@ -129,7 +155,8 @@ class Variant(object):
             {motif_name: (variant - reference log likelihood ratios)}.
 
         Returns:
-            motifs (dict of floats): {motif_name: (variant - reference log likelihood ratios)}
+            motifs (dict of floats): {motif_name: (variant_score, ref_score,
+                               (variant - reference log likelihood ratios))}
         """
 
         # List of lists [[field_name1, data1], [field_name2, data2]...]
@@ -147,8 +174,9 @@ class Variant(object):
 
         for i in names:
             idx = names.index(i)
-            diff = float(var_scores[idx]) - float(ref_scores[idx])
-            motifs[i] = diff
+            # Store scores for variant.
+            motifs[i] = [float(var_scores[idx]), float(ref_scores[idx]),
+                         float(var_scores[idx]) - float(ref_scores[idx])]
 
         return motifs
 
@@ -209,7 +237,7 @@ class Variant(object):
 
     def get_variant_summary(self):
         """
-        Creates a list of summary output fields for a given Variant as well as
+        Create a list of summary output fields for a given Variant as well as
         its distance metrics for plotting.
 
         Returns:
@@ -224,14 +252,13 @@ class Variant(object):
 
         for m in motif_info:
             m_score = motif_info[m]  # Motif delta score for var vs ref.
-
+            var_score, ref_score, diff_score = (m_score[0], m_score[1], m_score[2])
             for s in sample_info:
-                dist_metrics = [(float(m_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
+                dist_metrics = [(float(diff_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
                 dist_score = calc_distance(dist_metrics)
                 # Create complete list of output fields.
-                output_fields.append(var_info +
-                    [m] + [m_score] +
-                    [s[0]] + [s[1]] + [s[2]] + [s[3]] + [s[4]] + [dist_score])
+                output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [s[0]] + [s[1]] +
+                                     [s[2]] + [s[3]] + [s[4]] + [dist_score])
 
         return (output_fields)
 
@@ -246,7 +273,7 @@ def compare_samples(exp_samples, act_samples):
         exp_samples (list of str): List of variant samples with expression data.
         act_samples (list of str): List of variant samples with activity data.
 
-    Returns:
+    Return:
         common_samps (dict of tuple): {sample_name: (expression_index, activity_index)}
 
     """
@@ -265,7 +292,7 @@ def compare_samples(exp_samples, act_samples):
 
 def calc_distance(score_array):
     """
-    Returns a distance for a motif log-odds ratios, activity z-score, and gene expression z-score.
+    Return a distance for a motif log-odds ratios, activity z-score, and gene expression z-score.
     """
 
     return sqrt((score_array[0] ** 2) + (score_array[1] ** 2) + (score_array[2] ** 2))
@@ -300,7 +327,10 @@ def plot_distances(df, out_prefix):
         marker=dict(
             size=4,                 # Using gene expression as color scale values for now.
             color=df.SCALED_DISTANCE,                # set color to an array/list of desired values
-            colorscale='Viridis',   # choose a colorscale
+            colorscale=[[0, 'rgb(188, 191, 196)'], [0.5, 'rgb(188, 191, 196)'], [1, 'rgb(170, 1, 15)']],   # colorscale
+            colorbar=dict(
+                title='Scaled Distance'
+            ),
             opacity=0.8
         )
     )
@@ -316,7 +346,7 @@ def plot_distances(df, out_prefix):
         title='Distances from Average for Individual Variant Events',
         scene=dict(
             xaxis=dict(
-                title='Var/Ref Motif Log-Odds Ratio Difference',
+                title='Var/Ref Motif Log-Likelihood Ratio Difference',
                 titlefont=dict(
                     family='Courier New, monospace',
                     size=18,
@@ -343,34 +373,34 @@ def plot_distances(df, out_prefix):
     )
 
     fig = go.Figure(data=data, layout=layout)
-    # py.image.save_as(fig, filename=out_prefix + '.png')
-    plotly.offline.plot(fig, filename=out_prefix + '.html',
-        auto_open=False, image="png", image_filename=out_prefix)
+    plotly.offline.plot(
+        fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix
+    )
 
 
 def scale_and_frame(all_output):
     """
-    Return dataframe after adding scaled distance score to each row. Scaling
-    by dividing with max value of each metric, summation, and taking square
-    root. Make things much easier to plot and handle.
+    Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
+    metric, summation, and taking square root. Make things much easier to plot and handle.
 
     Args:
-        all_output (list of lists): Each list contains a set of
-            motif, expression, activity data:
-            [sample, loci1, sample act_z_score, gene1, sample exp_z_score, distance]
+        all_output (list of lists): Each list contains a set of motif, expression, activity data.
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
+             gene1, sample exp_z_score, distance]
 
-    Returns:
-        df (pandas Dataframe): Each row contains a set of
-            motif, expression, activity data:
-            [sample, loci1, sample act_z_score, gene1,
-                sample exp_z_score, distance, scaled_distance]
+    Return:
+        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
+             gene1, sample exp_z_score, distance, scaled_distance]
     """
 
-    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR-REF_SCORE', 'SAMPLE', 'LOCIID',
-                                           'ACT_ZSCORE', 'GENE', 'EXP_ZSCORE', 'DISTANCE'])
-    df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'ACT_ZSCORE', 'EXP_ZSCORE',
-                                                                        'DISTANCE']].apply(pd.to_numeric)
-    print((df.head(10)))
+    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
+                                           'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
+                                           'EXP_ZSCORE', 'DISTANCE'])
+    df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
+        'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
+                                                       'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
 
     # Get scaling factors.
     motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
@@ -388,13 +418,141 @@ def scale_and_frame(all_output):
     return df
 
 
-def main(vcf_file, out_prefix, d_thresh):
+def get_pwms(motifs_file, background, pc=0.1):
     """
+    Get PWMs for each motif in the motif_file.
 
     Args:
-        vcf_file (str): Path to sorted variant file to process.
-        out_prefix (str): Prefix to be used for output files.
-        d_thresh (float): Distance threshold to be used for more restricted plotting and reporting.
+        motifs_file (str):
+            Path to file containing motifs in JASPAR format as count matrices.
+        pc (float):
+            Pseudocount value to add to each position.
+        background (list of float):
+            A, C, T, and G background frequencies.
+
+    Return:
+        pwms (dict):
+            {motif_name: pwm R matrix}
+    """
+    pwms = {}
+
+    # Parse motifs using Biopython.
+    fh = open(motifs_file)
+    for m in motifs.parse(fh, "jaspar"):
+        pfm = m.counts.normalize(pseudocounts=pc)    # Create frequency matrix.
+        pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
+        name = m.name
+        # Create R matrix from motif pwm.
+        mat = R.r.matrix(R.FloatVector(pwm[0] + pwm[1] + pwm[2] + pwm[3]),
+                         nrow=4)
+        pwms[name] = mat
+    fh.close()
+
+    return pwms
+
+
+def find_pval(r_func, matrices, m_score, r_bg):
+    """
+    Utilize the given R function to calculate the detection thresholds for each pwm matrix given
+    the nucleotide background frequencies and score.
+
+    Args:
+        r_func (R function):
+            The R function that will be used to actually calculate the threshold using a matrix,
+            p-value, and background nucleotide frequencies.
+        matrices (dict of R matrix):
+            Dict of PWMs corresponding to each motif. {motif name: R PWM}
+        m_score (tuple):
+            Tuple of (score, motif).
+        r_bg (R FloatVector):
+            Vector containing background nucleotide frequencies [A, C, G, T]
+    """
+    score = m_score[0]
+    motif = m_score[1]
+    matrix = matrices[motif]
+
+    start = timer()
+    pval = r_func(matrix, score, r_bg)  # Actually calls the TFMPvalue function to calculate the p-value.
+    if pval[0] == 0:
+        pval[0] = 0.000000000000001  # So log can still be taken.
+    end = timer()
+
+    print(motif + ": " + str(end - start))
+
+    # Attempt to free memory by running R and python garbage collectors. This was an issue, not sure this resolves it.
+    R.r("gc()")
+    gc.collect()
+
+    return float(pval[0])
+
+
+def get_pvals(df, bg, matrices, proc):
+    """
+    Utilize the TFMPvalue R package to calculate p-values for both the variant and reference scores for a given
+    variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
+
+    Args:
+        df (pandas DataFrame):
+            Dataframe containing the motif scores for the variant and reference samples.
+        bg (list of float):
+            A, C, T, and G background frequencies.
+        matrices (dict of R matrices):
+            {motif name: R pwm matrix}
+        proc (int):
+            Processor cores to be used.
+
+    Return:
+        df (pandas DataFrame):
+            Updated DataFrame with p-values.
+    """
+    r_background = R.FloatVector((bg[0], bg[1], bg[2], bg[3]))
+    # Define R function to use.
+    calc_pval = R.r('''
+        function(mat, score, bg) {
+            options(digits=20)
+            rownames(mat, do.NULL = TRUE, prefix = "row")
+            rownames(mat) <- c("A","C","G","T")
+            names(bg) <- c("A","C","G","T")
+            TFMsc2pv(mat, score, bg, type="PWM")
+        }
+        ''')
+    ref_scores = [x for x in zip(df.REF_SCORE, df.MOTIF)]
+    var_scores = [x for x in zip(df.VAR_SCORE, df.MOTIF)]
+
+    with ThreadPool(proc) as pool:
+        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), var_scores,
+                                                itertools.repeat(r_background)))
+    with ThreadPool(proc) as pool:
+        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), ref_scores,
+                                                itertools.repeat(r_background)))
+
+    # Insert columns for p-values.
+    df.insert(6, 'VAR_PVAL', var_pvals)
+    df.insert(8, 'REF_PVAL', ref_pvals)
+    df[['VAR_PVAL', 'REF_PVAL']] = df[['VAR_PVAL', 'REF_PVAL']].apply(pd.to_numeric)
+
+    return df
+
+
+def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
+    """
+    Summarize each variant/motif/gene/sample/enhancer set, calculating p-values, distance scores, and plots.
+
+    Args:
+        vcf_file (str):
+            Path to sorted variant file to process.
+        out_prefix (str):
+            Prefix to be used for output files.
+        d_thresh (float):
+            Distance threshold to be used for more restricted plotting and reporting.
+        motif_file (str, optional):
+            Path to motif file.
+        background (list of float):
+            Background frequency of A, C, G, and T. Must sum to 1.
+        pc (float):
+            Pseudocount value to be used for PWM generation.
+        proc (int):
+            Number of processor cores to utilize.
     """
 
     with open(vcf_file) as f:
@@ -402,9 +560,8 @@ def main(vcf_file, out_prefix, d_thresh):
         line = f.readline().strip()
         now = time.strftime("%c")
 
-        command = ('##vampire=<ID=summary,Date="' + now +
-                   '",CommandLineOptions="--input ' + vcf_file +
-                   ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + '">')
+        command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
+                   ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + ' --motif ' + motif_file + '">')
         print(command)
 
         full_out_file = open(out_prefix + "_full.txt", "w")  # Full output.
@@ -433,12 +590,19 @@ def main(vcf_file, out_prefix, d_thresh):
         print("Calculating distance metrics.")
         scaled_df = scale_and_frame(all_output)
 
+        # Get p-values if motif file provided.
+        if motif_file:
+            print("Calculating p-values. This may take some time.")
+            bio_background = {'A': background[0], 'C': background[1], 'G': background[2], 'T': background[3]}
+            pwms = get_pwms(motif_file, bio_background, pc)
+            scaled_df = get_pvals(scaled_df, background, pwms, proc)
+
         print("Creating output files and plots.")
-        scaled_df.to_csv(rest_out_file, sep="\t", index=False)
+        scaled_df.to_csv(full_out_file, sep="\t", index=False)
 
         if d_thresh != 0:
             restricted_scaled_df = scaled_df[scaled_df.SCALED_DISTANCE > d_thresh]
-            restricted_scaled_df.to_csv(full_out_file, sep="\t", index=False)
+            restricted_scaled_df.to_csv(rest_out_file, sep="\t", index=False)
             plot_distances(restricted_scaled_df, out_prefix + "_restricted")
 
         # Get top 100 hits by distance.
@@ -449,15 +613,32 @@ def main(vcf_file, out_prefix, d_thresh):
         plot_distances(scaled_df, out_prefix + "_full")
         plot_distances(top100_df, out_prefix + "_top")
 
-    print(("Complete at: " + timeString() + "."))
+    print("Complete at: " + utils.timeString() + ".")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(usage=__doc__)
+    # Check if TFMPvalues package is installed, attempt to install if necessary.
+    utils.check_r_install('TFMPvalue')
+    TFMPvalues = importr('TFMPvalue')
 
+    parser = argparse.ArgumentParser(usage=__doc__)
     parser.add_argument("-i", "--input", dest="inp_file", required=True)
     parser.add_argument("-o", "--output", dest="out_pre", required=True)
     parser.add_argument("-d", "--dthresh", dest="d_thresh", required=False, default=0, type=float)
+    parser.add_argument("-m", "--motif", dest="motif_file", required=False, default=None)
+    parser.add_argument("-a", "--a_freq", dest="a_freq", required=False, default=0.25, type=float)
+    parser.add_argument("-c", "--c_freq", dest="c_freq", required=False, default=0.25, type=float)
+    parser.add_argument("-g", "--g_freq", dest="g_freq", required=False, default=0.25, type=float)
+    parser.add_argument("-t", "--t_freq", dest="t_freq", required=False, default=0.25, type=float)
+    parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
+                        required=False, default=0.1, type=float)
+    parser.add_argument("-p", "--processors", dest="processors", required=False, default=1, type=int)
     args = parser.parse_args()
 
-    main(args.inp_file, args.out_pre, args.d_thresh)
+    if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1:
+        bp = [args.a_freq, args.c_freq, args.g_freq, args.t_freq]
+    else:
+        print("Background frequencies must equal 1. Check input parameters, exiting.")
+        sys.exit()
+
+    main(args.inp_file, args.out_pre, args.d_thresh, args.motif_file, bp, args.pseudocounts, args.processors)

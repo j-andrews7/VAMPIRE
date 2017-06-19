@@ -11,23 +11,21 @@ Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTI
 
 Args:
     -i (required) <input.vcf>: Name of sorted variant file to process.
-    -o (required) <output.vcf>: Name of output file to be created.
+    -o (optional) <output.vcf>: Name of output file to be created.
         Not created if using -m and -mo
     -e (required) <expression.bed>: An expression 'bed' file.
     -m (optional) <motif.txt>: Tab-delimited key file containing a frequency
         matrix with each row corresponding to a base and each column
         corresponding to a position (JASPAR format).
-        If specified ignores input.vcf and output.vcf
+        If specified ignores output.vcf.
     -mo (optional) <motif_output.txt>: Name of output motif file to be created.
-        if blank and -m then creates .tf_filtered version of motif.txt file
+        If blank and -m then creates .tf_filtered version of motif.txt file
     -th (optional) <5>: TFs are considered expressed if they are above this threshold.
 """
-
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 
 import sys
 import argparse
-import time
 import motif
 
 
@@ -76,19 +74,17 @@ def filter_motifs(motifs, gene_dict, thresh):
 
         try:
             # TODO - Try to handle complexes and such - 'ATX::TCF3', etc.
-            exp_vals = gene_dict[item]    # this is the line that must be in try
+            exp_val = gene_dict[item.split("_")[0]]    # Handle possible additional index after motif name.
 
-            # Check if any of the expression values meet the threshold.
-            for x in exp_vals:
-                if float(x) >= thresh:
-                    pass_th = True
-                    indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
-                    for x in indices:
-                        if x not in passed:
-                            passed.append(x)
-                    break    # breaks out of x in exp_vals
+            # Check if the max expression value meets the threshold.
+            if float(exp_val) >= thresh:
+                pass_th = True
+                indices = [i for i, x in enumerate(motifs) if x == item]  # Find multiple motifs for same TF.
+                for x in indices:
+                    if x not in passed:
+                        passed.append(x)
 
-        except:
+        except KeyError:
             # TODO - Add option to retain motifs that don't match a gene in the expression file.
             pass_th = False
 
@@ -135,13 +131,13 @@ def process_line(line, gene_dict, thresh):
                 del motifns[i]
 
         # Create dict from other motif fields.
-        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=")
-                or field.startswith("MOTIFC=")):
+        elif (field.startswith("MOTIFV=") or field.startswith("MOTIFR=") or
+                field.startswith("MOTIFC=")):
             name = field[:7]
             values = field[7:].split(',')
             motif_other[name] = values
-        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=")
-                or field.startswith("MOTIFVG=") or field.startswith("MOTIFRG=")):
+        elif (field.startswith("MOTIFVH=") or field.startswith("MOTIFRH=") or
+                field.startswith("MOTIFVG=") or field.startswith("MOTIFRG=")):
             name = field[:8]
             values = field[8:].split(',')
             motif_other[name] = values
@@ -171,7 +167,7 @@ def process_line(line, gene_dict, thresh):
     return new_line
 
 
-def get_genes(exp_file, samples, threshold, max_only):
+def get_genes(exp_file, samples, threshold):
     """
     Reads in and parses the .bed expression file.
     File format expected to be:
@@ -182,10 +178,6 @@ def get_genes(exp_file, samples, threshold, max_only):
         exp_file (str): Name of expression file.
         samples (list): Names of the samples in the vcf file.
         threshold (float): Expression threshold to filter lowly/unexpressed genes.
-        max_only (bool): if true, gene_dict value is 1 value = max expression
-            if false gene_dict value is list of expression values
-            YYY: WARNING: if want list to have meaning
-                then values needs to be tied to header sample names
 
     Returns:
         gene_dict (dict): {gene_name: [expression_vals]}.
@@ -194,46 +186,25 @@ def get_genes(exp_file, samples, threshold, max_only):
     data_cols = []
     gene_dict = {}
 
-    print('start read exp_file:' + format(exp_file))
+    print('Reading expression file:' + format(exp_file))
 
-    if max_only:
-        # read and only return max exp value in gene_dict
-        with open(exp_file) as f:
-            header = f.readline().strip().split('\t')
-            for samp in header[4:]:
-                if samp in samples:
-                    data_idx = header.index(samp)
-                    data_cols.append(data_idx)
+    with open(exp_file) as f:
+        header = f.readline().strip().split('\t')
+        for samp in header[4:]:
+            if samp in samples:
+                data_idx = header.index(samp)
+                data_cols.append(data_idx)
 
-            # Read in expression levels for each gene.
-            for line in f:
-                line = line.strip().split('\t')
-                gene_name = line[3].upper()
-                exp_val = -1e1000
-                for idx in data_cols:
-                    if float(line[idx]) > exp_val:
-                        exp_val = float(line[idx])
+        # Read in expression levels for each gene.
+        for line in f:
+            line = line.strip().split('\t')
+            gene_name = line[3].upper()
+            exp_val = -1e1000
+            for idx in data_cols:
+                if float(line[idx]) > exp_val:
+                    exp_val = float(line[idx])
 
-                gene_dict[gene_name] = exp_val
-
-    else:
-        # read and return exp value list in gene_dict
-        with open(exp_file) as f:
-            header = f.readline().strip().split('\t')
-            for samp in header[4:]:
-                if samp in samples:
-                    data_idx = header.index(samp)
-                    data_cols.append(data_idx)
-
-            # Read in expression levels for each gene.
-            for line in f:
-                line = line.strip().split('\t')
-                gene_name = line[3].upper()
-                exp_vals = []
-                for idx in data_cols:
-                    exp_vals.append(line[idx])
-
-                gene_dict[gene_name] = exp_vals
+            gene_dict[gene_name] = exp_val
 
     return gene_dict
 
@@ -259,7 +230,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
                 corresponding to a position (JASPAR format).
                 If specified ignores input.vcf and output.vcf
                 sets vcf_true: see above
-            motifout_file (-mo,str): Name of output motif file to be created.
+            motifout_file (-mo, str): Name of output motif file to be created.
                 if None -m creates .tf_filtered version of motif.txt file
 
     """
@@ -291,7 +262,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
             print(line, file=output_f)
 
             print("Creating gene dictionary for expression data.")
-            gene_dict = get_genes(exp_file, samples, th, True)
+            gene_dict = get_genes(exp_file, samples, th)
 
             if len(gene_dict) == 0:
                 print("Error, no genes above threshold found in expression file.",
@@ -300,8 +271,8 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
                 sys.exit()
 
             print("Filtering motif info for TFs that don't meet the expression threshold of " +
-                str(th) + ". Found " + format(len(gene_dict)) +
-                " genes. Start processing vcf file.")
+                  str(th) + ". Found " + format(len(gene_dict)) +
+                  " genes. Start processing vcf file.")
             for line in vcf:
                 new_line = process_line(line, gene_dict, th)
                 if new_line is not None:
@@ -325,7 +296,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
         # done with vcf file; only used to get samples
 
         print("Creating gene dictionary for expression data.")
-        gene_dict = get_genes(exp_file, samples, th, True)
+        gene_dict = get_genes(exp_file, samples, th)
 
         if len(gene_dict) == 0:
             print("Error, no genes above threshold found in expression file.",
@@ -334,7 +305,7 @@ def main(inp_file, exp_file, out_file, th=5, motif_file=None, motifout_file=None
             sys.exit()
 
         print("Filtering motif info for TFs that don't meet the expression threshold of " +
-            str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
+              str(th) + ". Found " + format(len(gene_dict)) + " genes. Start filtering motifs.")
 
         motif.get_filterbygene_put_motifs(motif_file, motifout_file, th, gene_dict)
 
@@ -346,13 +317,19 @@ if __name__ == '__main__':
 
     parser.add_argument("-i", "--input", dest="input_file", required=True)
     parser.add_argument("-e", "--expression", dest="exp_file", required=True)
-    parser.add_argument("-m", "--motif_input", dest="motif_file",
-        required=False, default=None)
-    parser.add_argument("-mo", "--motif_output", dest="motif_out_file",
-        required=False, default=None)
-    parser.add_argument("-o", "--output", dest="output_file", required=True)
-    parser.add_argument("-th", "--threshold", dest="threshold",
-        required=False, default=5, type=float)
+    parser.add_argument(
+        "-m", "--motif_input", dest="motif_file",
+        required=False, default=None
+    )
+    parser.add_argument(
+        "-mo", "--motif_output", dest="motif_out_file",
+        required=False, default=None
+    )
+    parser.add_argument("-o", "--output", dest="output_file", required=False)
+    parser.add_argument(
+        "-th", "--threshold", dest="threshold",
+        required=False, default=5, type=float
+    )
 
     args = parser.parse_args()
 

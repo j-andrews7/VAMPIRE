@@ -7,9 +7,12 @@ intended to be imported with motifs.py and other for related functionality
 """
 
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
-import sequence    # need sub_from_*, crop_from_*
-                   # (maybe later need int func and split wing/core processing)
-                   # then would want base sequence object
+
+import sequence
+# need sub_from_*, crop_from_*
+# (maybe later need int func and split wing/core processing)
+# then would want base sequence object
+
 from math import log2
 import numpy as np
 
@@ -69,11 +72,11 @@ class MotifArray:
         dictNames = {}
         #for me in self.motifs:
         for index in range(0, (len(self.motifs) - 1)):
-            if dictNames[self.motifs[index].name] is None:
+            if self.motifs[index].name not in dictNames:
                 dictNames[self.motifs[index].name] = [index]
             else:
                 # name already exists
-                dictNames[self.motifs[index].name].append = index
+                dictNames[self.motifs[index].name].append(index)
                 notUnique[self.motifs[index].name] = dictNames[self.motifs[index].name]
 
         return notUnique
@@ -82,7 +85,7 @@ class MotifArray:
         """
         Rename non-unique MotifElement names by adding an index
             oldName
-            newName__1     --or--   newName__<append_string>1
+            newName_1     --or--   newName_<append_string>1
         Assumes index will not suddenly overlap with another previously
         existing motif. Could iteratively check...
 
@@ -99,10 +102,10 @@ class MotifArray:
 
         if append_string is not None:
             # use an append string
-            append_string = '__' + append_string
+            append_string = '_' + append_string
         else:
             # do use an append string
-            append_string = '__'
+            append_string = '_'
 
         inf_loop_break = 0
         while (len(notUnique) > 0 and inf_loop_break < 5):
@@ -258,9 +261,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -295,6 +298,7 @@ class MotifArray:
             negative = boolean, if true, mark matched motif names with dash
                 used to indicate at reverse complement match. ie -TF_NAME
 
+
         Returns: A list of MotifMatch objects
 
         see also: motif_match
@@ -314,9 +318,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -336,6 +340,7 @@ class MotifArray:
         Same as motif_match_int except instead of returning a match set
         filtered on thresholds the function prints all comma separated scores
         one line for variant set and one line for reference set
+
         note: does not flag negative matches as motif_match_int can
 
         column 1 is code for variant or reference
@@ -444,9 +449,9 @@ class MotifArray:
             if (max_score >= th or rmax_score >= rth):
                 if (iden != rid or name != rname or th != rth):
                     print(("***ERROR*** matching motifs to varseq and refseq desynced\n" +
-                          iden + " != " + rid +
-                          " or " + name + " != " + rname +
-                          " or " + format(th) + " != " + format(rth)))
+                           iden + " != " + rid +
+                           " or " + name + " != " + rname +
+                           " or " + format(th) + " != " + format(rth)))
                 # tup = (id, name, max_score, match_seq, rmax_score, rmatch_seq)
                 match = MotifMatch(name, max_score, rmax_score, motif_index)
                 matches.append(match)
@@ -487,7 +492,7 @@ class MotifArray:
         scores = []
 
         for motif_index in range(len(self.motifs)):
-            #### (iden, name, thresh, p_matrix) = tup
+            # (iden, name, thresh, p_matrix) = tup
             motif_element = self.motifs[motif_index]
 
             # -- prepare the motif element and sequence string for scoring
@@ -498,7 +503,7 @@ class MotifArray:
                 # need to calculate base occurence frequency by position. why
                 # didn't it do this during insertion? will call many times here
                 print("motif_scores: probabilities not previously calculated for " +
-                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                      motif_element.print_str + ". Likely slower to calculate here. Fix")
                 motif_element.calculate_probabilities()
 
             # trim flanking bases to one less than motif length
@@ -653,7 +658,7 @@ class MotifArray:
         scores = []
 
         for motif_index in range(len(self.motifs)):
-            #### (iden, name, thresh, p_matrix) = tup
+            # (iden, name, thresh, p_matrix) = tup
             motif_element = self.motifs[motif_index]
 
             # -- prepare the motif element and sequence string for scoring
@@ -664,7 +669,7 @@ class MotifArray:
                 # need to calculate base occurence frequency by position. why
                 # didn't it do this during insertion? will call many times here
                 print("motif_scores: probabilities not previously calculated for " +
-                    motif_element.print_str + ". Likely slower to calculate here. Fix")
+                      motif_element.print_str + ". Likely slower to calculate here. Fix")
                 motif_element.calculate_probabilities()
 
             # trim flanking bases to one less than motif length
@@ -1384,7 +1389,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     return motif_set
 
 
-def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
+def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     """
     Read in motif file, modify defined thresholds in place and output updated file
     Based on thresholds.py::output_motifs.
@@ -1393,14 +1398,9 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     Args:
         input_f (str): Name of file containing frequency matrices for each motif.
         output_f (str): Name of output file.
-        default_th (float): Default threshold value used if the calculated
-            threshold is lower than this value.
-            This value may be None.
-            Ex: for default_th = 0.0, if biopython calculates threshold needed for
-            a given false positive rate as -1.23, threshold printed will be 0.0.
         overwrite (bool): True if thresholds already in the file should be replaced.
         thresholds_list (list): List of thresholds (floats);
-            for thresholds.py calls, thresholds list is calculated by biopython.
+            for thresholds.py calls, thresholds list is calculated by TFM-PVALUE.
             thresholds_list must be the same length as the number of motifs read in
 
     See Also: thresholds.py
@@ -1414,11 +1414,10 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
     idx = 0
 
     with open(input_f) as f:
-
-        # JASPAR motif file has >name \n A [ tab delineated weight array ] \n
+        # JASPAR motif file has >id  name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
-        #iden = "No id found"
-        #name = "No name found"
+        iden = "No id found"
+        name = "No name found"
         # Index for line in the motif matrix.
         i = -1
 
@@ -1439,8 +1438,8 @@ def get_put_motifs(input_f, output_f, default_th, overwrite, thresholds_list):
                 # determine what threshold to put
                 if not overwrite and given_thresh is not None:
                     line[2] = str(given_thresh)
-                elif default_th is not None and default_th > thresholds_list[idx]:
-                    line[2] = str(default_th)
+                #elif default_th is not None and default_th > thresholds_list[idx]:
+                    #line[2] = str(default_th)
                 else:
                     line[2] = str(thresholds_list[idx])
                 # print the updated line
@@ -1485,6 +1484,7 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
 
     output_fh = open(output_f, "w")
     idx = 0
+    skipped = set()
 
     with open(input_f) as f:
 
@@ -1500,10 +1500,11 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
             # First line contains id, name and threshold; only check name
             if i == 0:
                 name = line.split()[1]
+                strict_name = name.split("_")[0]  # Make sure motif index doesn't affect lookup.
                 output_line = False    # reset to false (default)
                 # handle gene matching
                 try:
-                    exp_vals = gene_dict[name]    # this is the line that must be in try
+                    exp_vals = gene_dict[strict_name]    # this is the line that must be in try
                     # Check if any of the expression values meet the threshold.
                     if type(exp_vals) == float:
                         if exp_vals >= threshold:
@@ -1527,7 +1528,10 @@ def get_filterbygene_put_motifs(input_f, output_f, threshold, gene_dict):
             # Output motif and continue (there are 2 newlines between motifs)
             if output_line:
                 print(line.strip(), file=output_fh)
-
+            else:
+                skipped.add(name)
+    for x in skipped:
+        print(x + " removed from motif file due to not meeting expression threshold or missing from file.")
     output_fh.close()
     return
 
@@ -1577,15 +1581,15 @@ def get_baseline_probs(baseline_f):
                         return bp_array
         except ValueError:
             print(("**ERROR** Baseline probability file incorrectly formatted.\n" +
-                  "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
-                  "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
-                  "\tContinuing with default probabilities: " + format(bp_array)))
+                   "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+                   "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+                   "\tContinuing with default probabilities: " + format(bp_array)))
             return bp_array
 
         print(("**ERROR** Empty baseline probability file found.\n" +
-              "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
-              "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
-              "\tContinuing with default probabilities: " + format(bp_array)))
+               "\tFile should contain only [ PrA PrC PrG PrT ] \n" +
+               "\tWhere PrA + PrC + PrG + PrT = 1 (and all are positive and non-zero)\n" +
+               "\tContinuing with default probabilities: " + format(bp_array)))
         return bp_array
 
 

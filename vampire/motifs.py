@@ -54,16 +54,12 @@ Args:
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import sys
 import argparse
-#import pdb    # necessary for debugger; use pdb.set_trace()
-from . import motif
-from . import sequence
-from . import vcf
-from .utils import timeString
+import motif
+import sequence
+import vcf
+from utils import timeString
 
 from pyfaidx import Fasta
-
-
-parser = argparse.ArgumentParser(usage=__doc__)
 
 
 # TODO - Remove use of this, will only create headaches later.
@@ -192,8 +188,8 @@ def update_vcf(line, matches, output_fileHandle, options):
     # If there are no matches, print the line unchanged or filter it out (return
     # without printing)
     if to_be_printed == 0:
-        if (not options.filter_vcf_motif and not options.filter_vcf_chip
-            and not options.filter_vcf_no):
+        if (not options.filter_vcf_motif and not options.filter_vcf_chip and
+                not options.filter_vcf_no):
             print(line, file=output_fileHandle)
         return
 
@@ -204,8 +200,8 @@ def update_vcf(line, matches, output_fileHandle, options):
         if outline != "":
             outline += "\t"
         if idx == 7:
-            outline = update_vcf_motifs_info(outline, names, varscores, refscores,
-                varht, refht, vargc, refgc, options, chips, col)
+            outline = update_vcf_motifs_info(
+                outline, names, varscores, refscores, varht, refht, vargc, refgc, options, chips, col)
         else:
             outline += col
         idx += 1
@@ -214,8 +210,8 @@ def update_vcf(line, matches, output_fileHandle, options):
         print("**Error** VCF formatted incorrectly. Less than 8 columns found:\n" + line)
         # Add output at the end anyway
         outline += "\t"
-        outline = update_vcf_motifs_info(outline, names, varscores, refscores,
-                varht, refht, vargc, refgc, options, chips, col)
+        outline = update_vcf_motifs_info(
+            outline, names, varscores, refscores, varht, refht, vargc, refgc, options, chips, col)
 
     print(outline, file=output_fileHandle)
 
@@ -223,7 +219,7 @@ def update_vcf(line, matches, output_fileHandle, options):
 
 
 def update_vcf_motifs_info(outline, names, varscores, refscores, varht, refht,
-        vargc, refgc, options, chips, col):
+                           vargc, refgc, options, chips, col):
     """
     Used in conjunction with update_vcf() to add motifs information to the line.
     Reduces code maintenance by putting update code in 1 place
@@ -393,7 +389,8 @@ def match_peaks(chrom, pos, peaks, chip_fh, matches, output_fileHandle, sorted_l
                     for trans_factor in ptfs:
                         # If the transcription factor (chip peak) name is the same as
                         # the matched motif name, note that there is a chip match
-                        if trans_factor == matches[motif_idx].name or trans_factor == matches[motif_idx].name.strip('-'):
+                        if (trans_factor == matches[motif_idx].name or
+                                trans_factor == matches[motif_idx].name.split('_')[0]):
                             # Motif match is verified by ChIP data
                             matches[motif_idx].chip_match = True
                 # Save with new value for pmms
@@ -553,9 +550,9 @@ def print_peak(peak, fileHandle, filter_bed):
 
 
 def main(file_input, file_output, file_reference_genome, file_motif, file_baseline_prob,
-        pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
-        file_chip, file_output_chip, filter_co, sorted_lex,
-        filter_chip, filter_motif, filter_novel):
+         pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
+         file_chip, file_output_chip, filter_co, sorted_lex,
+         filter_chip, filter_motif, filter_novel):
     """
     Args:
         Unless specified as required, use None to not use.
@@ -928,8 +925,8 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         #    self.get_surround_seq(self, wing_length, fasta_object, force_ref_match)
         #
         print("\t\tpulling " + format(wing_l) +
-            " base wings from index " + format(fa_ind) +
-            " arg: " + format(force_ref_match))
+              " base wings from index " + format(fa_ind) +
+              " arg: " + format(force_ref_match))
         var_element.get_surround_seq(wing_l, fa_ind, force_ref_match)
         # 2. compute reverse complement
         var_element.assign_rev_complement()
@@ -949,8 +946,8 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         #     plusmatch returns an list of MotifMatch objects
         # 5. Add local environment data:
         print("start process_local_env_int")
-        plusmatch = motif_set.process_local_env_int(bp, plusmatch, var_element,
-            None, var_seq, ref_seq, wing_l, run_homotypic)
+        plusmatch = motif_set.process_local_env_int(
+            bp, plusmatch, var_element, None, var_seq, ref_seq, wing_l, run_homotypic)
 
         # 6. Calculate motif matches to reverse complement
         ref_seq_rc = var_element.return_full_ref_seq_reverse_complement_int(wing_l)
@@ -961,15 +958,15 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
         minusmatch = motif_set.motif_match_int(bp, ref_seq_rc, var_seq_rc, wing_l, True)
         # 7. Add local environment data
         print("start process_local_env_int reverse complement")
-        minusmatch = motif_set.process_local_env_int(bp, minusmatch, var_element,
-            None, var_seq_rc, ref_seq_rc, wing_l, run_homotypic)
+        minusmatch = motif_set.process_local_env_int(
+            bp, minusmatch, var_element, None, var_seq_rc, ref_seq_rc, wing_l, run_homotypic)
 
         # 8. Join two match sets
         matches = plusmatch + minusmatch
         print(("\t" + format(var_element.name) + ":" + format(var_element.position) +
-            " +match(" + format(len(plusmatch)) +
-            ") + -match(" + format(len(minusmatch)) +
-            ") = matches(" + format(len(matches)) + ")"))
+               " +match(" + format(len(plusmatch)) +
+               ") + -match(" + format(len(minusmatch)) +
+               ") = matches(" + format(len(matches)) + ")"))
 
         # Update ChIP buffer for current position
         # Update matches array with peak overlap data
@@ -1036,11 +1033,11 @@ if __name__ == '__main__':
     parser.add_argument("-fp", "--filter_co", action="count", required=False)
     parser.add_argument("-sk", "--kary_sort", action="count", required=False)
     parser.add_argument("-mv", "--multi_variant", dest="multi_var",
-        required=False)    # use -1 and correct to wing_size below
+                        required=False)    # use -1 and correct to wing_size below
     parser.add_argument("-rf", "--force_ref_match", action="count",
-        required=False)
+                        required=False)
     parser.add_argument("-ht", "--homotypic_run", action="count",
-        required=False)
+                        required=False)
 
     args = parser.parse_args()
 
@@ -1073,8 +1070,7 @@ if __name__ == '__main__':
     filter_novel = args.filter_novel
 
     main(file_input, file_output, file_reference_genome, file_motif, file_baseline_prob,
-        pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
-        file_chip, file_output_chip, filter_co, sorted_lex,
-        filter_chip, filter_motif, filter_novel
-    )
-
+         pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
+         file_chip, file_output_chip, filter_co, sorted_lex,
+         filter_chip, filter_motif, filter_novel
+         )
