@@ -72,11 +72,11 @@ class MotifArray:
         dictNames = {}
         #for me in self.motifs:
         for index in range(0, (len(self.motifs) - 1)):
-            if dictNames[self.motifs[index].name] is None:
+            if self.motifs[index].name not in dictNames:
                 dictNames[self.motifs[index].name] = [index]
             else:
                 # name already exists
-                dictNames[self.motifs[index].name].append = index
+                dictNames[self.motifs[index].name].append(index)
                 notUnique[self.motifs[index].name] = dictNames[self.motifs[index].name]
 
         return notUnique
