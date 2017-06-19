@@ -1362,9 +1362,9 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
                             ':\n\tdropping motif element ' +
                             format(base_element.name) + '.'))
                     if bad_motif_count > 2:
-                        # XXX: throw an ERROR
                         print('Too many errors encountered. User input invalid')
                         raise ValueError('User defined motif file format invalid.')
+                        raise Exception('User defined motif file format invalid.')
 
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
