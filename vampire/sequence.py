@@ -111,6 +111,53 @@ class SequenceArray:
 
         return
 
+    def join_elements(self, index1, index2, fasta_object, insert_flag=True):
+        """
+        Given index of 2 elements in SequenceArray() join those two elements
+        as a new element and add to the end. Only joins if elements have the
+        same chromosome.
+        Sets the multivariate flag of the new element
+
+        Args:
+            index1: index into SequenceArray of the first element to join
+            index2: index into SequenceArray of the second element to join
+            fasta_object = indexed fasta file object
+            insert_flag: if True run add_seq_multivariant
+                if insertSet add new index to the multivariant array
+        Return:
+            modifies self sequenceArray to include a new element
+
+        """
+        print('XXX: this function needs to be tested; use in multivariant_list_build?')
+        if self.seq[index1].name != self.seq[index2].name:
+            return
+        if self.seq[index1].pos == -1 or self.seq[index2].pos == -1:
+            return
+
+        # information needed: assign(self, chromosome, position, reference_seq, variant_seq):
+        name_to_use = self.seq[index1].name
+        start1 = self.seq[index1].position
+        start2 = self.seq[index2].position
+
+        end1 = start1 + len(self.seq[index1].seq_var)
+        end2 = start2 + len(self.seq[index2].seq_var)
+
+        #grab_from(start - end)
+        seq_ref = get_seq(name_to_use, start1, end2, fasta_object)
+        seq_var = self.seq[index1].var_seq + \
+            get_seq(name_to_use, end1 + 1, start2 - 1, fasta_object) + \
+            self.seq[index2].var_seq
+
+        # assign new element
+        new_sequence_element = SequenceElement()
+        new_sequence_element.assign(name_to_use, start1, seq_ref, seq_var)
+        new_sequence_element.multivariate = True
+
+        if insert_flag:    # if False --> user must manually insert
+            self.add_seq_multivariant(new_sequence_element)
+
+        return (new_sequence_element)
+
     def length(self):
         """return length of the array"""
         return (len(self.seq))
@@ -261,6 +308,7 @@ class SequenceArray:
                 # -- create the new sequence element
                 new_sequence_element = SequenceElement()
                 new_sequence_element.assign(chr_name, start_pos, ref_seq, var_seq)
+                new_sequence_element.multivariate = True
                 # ZZZ: need to update for wings? no do in motifs
                 # grab samples for variant from the overlapping set
                 new_sequence_element.assign_samples(overlap_samples)
@@ -411,6 +459,7 @@ class SequenceElement:
         self.samples = []     # set of sample (by index) for this sequence
                               # index from placement in file just like header
         self.vcf_line = ""    # vcf input line for variant
+        self.multivariate = False    # True if join of multiple adjacent eelments
 
     def assign(self, chromosome, position, reference_seq, variant_seq):
         """
@@ -783,6 +832,38 @@ def crop_from_right(sequence_string, crop_length):
         return ""
 
     return sequence_string[:-crop_length]
+
+
+# ZZZ: Can not be a SequenceElement class method because used in
+#        SequenceArray.multivariant_list_build prior to SequenceElement() creation
+def get_seq(chromo, var_pos, end_pos, fas):
+    """ Return sequence betweeen two positions from the reference sequence file.
+
+    Args:
+        chromo = Chromosome of variant, e.g. "chr19" or "19" (must be a string)
+        var_pos = Integer position of variant start within chromosome.
+        end_pos = Integer positions of the last variant within the chromosome
+        fas = indexed fasta file object
+
+    Returns:
+        ref_seq = Sequence (string) between start and end index.
+            Data from reference genome file.
+    """
+
+    # fas['chr1'][0:1] returns the first base (just one)
+    # is either  0 indexed and max (last) base is not returned
+    #   or      1 indexed and min (first) base isn't returned
+    # fas returns a 'sequence' object, converted by a string for return
+    print(("pulling reference sequence for (" + chromo + ", " +
+           format(var_pos) + ":" + format(end_pos) + "," +
+           format(fas) + ")\n\t"
+           ))
+    #  fas is 0 indexed ie var_pos - 1 to get correct value for var_pos
+    #     so var_pos - 0 - 1 returns the value at var_pos in the fasta sequence
+    #     do not print with -1 above to avoid confusing the user
+    ref_seq = fas[chromo][var_pos - 1:end_pos - 1]
+
+    return str(ref_seq)
 
 
 # ZZZ: Can not be a SequenceElement class method because used in
