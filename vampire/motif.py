@@ -56,7 +56,7 @@ class MotifArray:
 
         return
 
-    def element_overlap(self):
+    def element_overlap(self):  # YYY-JA 06192017: May be appropriate to remove this function.
         """
         Determine if any motifElement names in MotifArray are not unique
         Returns dictionary of notUnique names with a list of their
@@ -81,7 +81,7 @@ class MotifArray:
 
         return notUnique
 
-    def element_overlap_rename(self, append_string=None):
+    def element_overlap_rename(self, append_string=None):  # YYY-JA 06192017: May be appropriate to remove this.
         """
         Rename non-unique MotifElement names by adding an index
             oldName
@@ -1416,10 +1416,11 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     with open(input_f) as f:
         # JASPAR motif file has >id  name \n A [ tab delineated weight array ] \n
         # arrays for C, G, T - each with same format as A
-        iden = "No id found"
-        name = "No name found"
+
         # Index for line in the motif matrix.
         i = -1
+
+        names = {}
 
         for line in f:
 
@@ -1427,8 +1428,15 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
             # First line contains id and name
             if i == 0:
                 line = line.strip().split()
-                #iden = line[0]
-                #name = line[1]
+                name = line[1]
+
+                # Handle motifs with same names.
+                if name in names:
+                    names[name] += 1
+                    line[1] = name + "_" + str(names[name])
+                else:
+                    names[name] = 1
+
                 # Read in listed threshold
                 if (len(line) > 2):
                     given_thresh = float(line[2])
@@ -1438,13 +1446,11 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
                 # determine what threshold to put
                 if not overwrite and given_thresh is not None:
                     line[2] = str(given_thresh)
-                #elif default_th is not None and default_th > thresholds_list[idx]:
-                    #line[2] = str(default_th)
                 else:
                     line[2] = str(thresholds_list[idx])
-                # print the updated line
+
                 print("\t".join(line), file=output_fh)
-            # next 4 lines are position weight matrices in order A,C,G,T.
+            # Next 4 lines are position weight matrices in order A,C,G,T.
             elif i < 5:
                 print(line.strip(), file=output_fh)
 

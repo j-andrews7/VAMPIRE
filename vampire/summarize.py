@@ -453,8 +453,8 @@ def get_pwms(motifs_file, background, pc=0.1):
 
 def find_pval(r_func, matrices, m_score, r_bg):
     """
-    Utilize the given R function to calculate the detection thresholds for each pwm matrix given
-    the nucleotide background frequencies and score.
+    Utilize the given R function to calculate the p-values for a score and motif given
+    the nucleotide background frequencies and PWM list.
 
     Args:
         r_func (R function):
