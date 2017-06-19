@@ -54,10 +54,10 @@ Args:
 from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
 import sys
 import argparse
-from . import motif
-from . import sequence
-from . import vcf
-from .utils import timeString
+import motif
+import sequence
+import vcf
+from utils import timeString
 
 from pyfaidx import Fasta
 
