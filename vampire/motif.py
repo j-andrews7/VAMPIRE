@@ -1364,8 +1364,8 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
                     #      any errors are encountered (ie bad file format)
                     bad_motif_count = bad_motif_count + 1
                     print(('Reading ' + format(motif_filename) +
-                            ':\n\tdropping motif element ' +
-                            format(base_element.name) + '.'))
+                           ':\n\tdropping motif element ' +
+                           format(base_element.name) + '.'))
                     if bad_motif_count > 2:
                         print('Too many errors encountered. User input invalid')
                         raise ValueError('User defined motif file format invalid.')
@@ -1443,7 +1443,7 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
                 else:
                     given_thresh = None
                     line.append("0")
-                # determine what threshold to put
+                # Determine what threshold to put
                 if not overwrite and given_thresh is not None:
                     line[2] = str(given_thresh)
                 else:
@@ -1720,12 +1720,12 @@ def put_motifs(motif_filename, motif_set, pc, default_th, base_pr):
                     #      any errors are encountered (ie bad file format)
                     bad_motif_count = bad_motif_count + 1
                     print('Reading ' + format(motif_filename) +
-                            ':\n\tdropping motif element ' +
-                            format(base_element.name) + '.' )
+                          ':\n\tdropping motif element ' +
+                          format(base_element.name) + '.')
                     if bad_motif_count > 2:
-                        # XXX: throw an ERROR
                         print('Too many errors encountered. User input invalid')
                         raise ValueError('User defined motif file format invalid.')
+                        raise Exception('User defined motif file format invalid.')
 
                 # append the current TF matrix to the motif set
                 motif_set.add_motif(base_element)
