@@ -7,10 +7,6 @@ Intended to be imported to reduce code redundancy and streamline code maintenanc
 
 import time
 
-import readline  # Often necessary for rpy2 to work properly.
-import rpy2.robjects as robjects
-import rpy2.robjects.packages as rpackages
-
 
 class Position(object):
     """
@@ -97,16 +93,3 @@ def timeString():
     """
     return time.strftime('%Y%m%d.%H:%M:%S')
 
-
-def check_r_install(package):
-    """
-    Check if an R package is installed and attempt to install if not.
-    """
-    if not robjects.packages.isinstalled(package):
-        print(package + " R package not found.\nAttempting to install " + package + " R package.")
-        utils = rpackages.importr('utils')
-        utils.chooseCRANmirror('http://cran.wustl.edu/')
-        utils.install_packages(package)
-        print("Installation complete.")
-
-    return

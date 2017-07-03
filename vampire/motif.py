@@ -1389,7 +1389,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     return motif_set
 
 
-def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
+def get_put_motifs(input_f, output_f, overwrite, thresholds_dict):
     """
     Read in motif file, modify defined thresholds in place and output updated file
     Based on thresholds.py::output_motifs.
@@ -1399,9 +1399,9 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
         input_f (str): Name of file containing frequency matrices for each motif.
         output_f (str): Name of output file.
         overwrite (bool): True if thresholds already in the file should be replaced.
-        thresholds_list (list): List of thresholds (floats);
-            for thresholds.py calls, thresholds list is calculated by TFM-PVALUE.
-            thresholds_list must be the same length as the number of motifs read in
+        thresholds_dict (tuple): Dict of {motif_name: threshold}.
+            For thresholds.py calls, thresholds dict is calculated by TFM-PVALUE.
+            thresholds_list must be the same length as the number of motifs read in.
 
     See Also: thresholds.py
     Test Code:
@@ -1411,7 +1411,6 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
     """
 
     output_fh = open(output_f, "w")
-    idx = 0
 
     with open(input_f) as f:
         # JASPAR motif file has >id  name \n A [ tab delineated weight array ] \n
@@ -1447,7 +1446,7 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
                 if not overwrite and given_thresh is not None:
                     line[2] = str(given_thresh)
                 else:
-                    line[2] = str(thresholds_list[idx])
+                    line[2] = str(thresholds_dict[name])
 
                 print("\t".join(line), file=output_fh)
             # Next 4 lines are position weight matrices in order A,C,G,T.
@@ -1457,7 +1456,6 @@ def get_put_motifs(input_f, output_f, overwrite, thresholds_list):
             # Output motif and continue (there are 2 newlines between motifs)
             else:
                 print(line.strip(), file=output_fh)
-                idx += 1    # increment threshold list index
                 i = -1      # reset motif matrix line index
 
     output_fh.close()

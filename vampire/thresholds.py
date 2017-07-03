@@ -32,9 +32,11 @@ from Bio import motifs
 
 from motif import get_put_motifs
 from utils import timeString
+from memory_profiler import profile
 
 
-def find_thresh(matrix, pval, bg):
+@profile
+def find_thresh(combo):
     """
     Calculate the detection thresholds for each pwm matrix given the nucleotide
     background frequencies and desired p-value.
@@ -46,13 +48,17 @@ def find_thresh(matrix, pval, bg):
         bg (list of floats): List containing background nucleotide frequencies [A, C, G, T]
     """
 
+    matrix, pval, bg = (combo[0], combo[1], combo[2])
+
     start = timer()
-    thresh = tfmp.read_matrix(matrix[1], bg=bg, mat_type="pwm")
+    mat = tfmp.read_matrix(matrix[1], bg=bg, mat_type="pwm")
+    thresh = tfmp.pval2score(mat, pval)
+    del mat
     end = timer()
 
     print(matrix[0] + ": " + str(end - start))
 
-    return thresh
+    return (matrix[0], thresh)
 
 
 def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
@@ -68,19 +74,24 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
         pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
 
         # Create R matrix from motif pwm.
-        mat = " ".join(pwm[0] + pwm[1] + pwm[2] + pwm[3])
+        mat = pwm[0] + pwm[1] + pwm[2] + pwm[3]
+        mat = [str(x) for x in mat]
+        mat = " ".join(mat)
         matrices.append((m.name, mat))
 
     fh.close()
 
     # Multiprocessing to use multiple processing cores.
     print(("Calculating thresholds (" + timeString() + "). This should only take a few minutes."))
+    thresholds = []
     with ThreadPool(p) as pool:
-        thresholds = pool.starmap(find_thresh, zip(matrices, itertools.repeat(pv), itertools.repeat(bp)))
+        for x in pool.imap_unordered(find_thresh, zip(matrices, itertools.repeat(pv),
+                                                      itertools.repeat(bp)), chunksize=8):
+            thresholds.append(x)
 
     print(("Total motifs read: " + str(len(thresholds))))
     print("Writing output file.")
-    get_put_motifs(motif_file, motif_outfile, ow, thresholds)
+    get_put_motifs(motif_file, motif_outfile, ow, dict(thresholds))
     print(("Done (" + timeString() + ")"))
 
     return
