@@ -11,47 +11,36 @@ A third will report the sets for the top 100 distance scores.
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
 
 Args:
-    -i (str):
-        Path to sorted variant file to process.
-    -o (str):
-        Prefix for output files.
-    -d (float, optional):
-        Distance magnitude threshold that must be met for variants/genes to be reported to output.
-        Default is 0, so all variant-sample activity-gene set distances will be reported.
-    -m (str):
-        Path to motif file with counts.
-    -a (float, optional) <0.25>:
-        Background probability for A nucleotides. If not
-        provided then all are assumed to be equally likely (all are 0.25).
-    -c (float, optional) <0.25>:
-        Background probability for C nucleotides.
-    -g (float, optional) <0.25>:
-        Background probability for G nucleotides.
-    -t (float, optional) <0.25>:
-        Background probability for T nucleotides.
-    -pc (float, optional) <0.1>:
-        Pseudocounts value to be added to all positions of the motif frequency matrix before calculating
-        the probability matrix.
-    -p (int, optional) <1>:
-        Processor cores to utilize. Will decrease computation time linearly.
+    -i (str): Path to sorted variant file to process.
+    -o (str): Prefix for output files.
+    -d (float, optional): Scaled distance magnitude threshold that must be met for variants/genes to be reported to output.
+        Default is 0, so all set distances will be reported. Magnitude of 0.7 usually yields results pretty different from
+        the norm.
+    -m (str): Path to motif file with counts.
+    -a (float, optional) <0.25>: Background probability for A nucleotides. If not provided then all are assumed to
+        be equally likely (all are 0.25).
+    -c (float, optional) <0.25>: Background probability for C nucleotides.
+    -g (float, optional) <0.25>: Background probability for G nucleotides.
+    -t (float, optional) <0.25>: Background probability for T nucleotides.
+    -pc (float, optional) <0.1>: Pseudocounts value to be added to all positions of the motif frequency matrix before
+        calculating the probability matrix.
+    -p (int, optional) <1>: Processor cores to utilize. Will decrease computation time linearly.
 """
 import argparse
 import sys
 import time
 from math import sqrt
+from math import log10
 from multiprocessing.dummy import Pool as ThreadPool
 import itertools
 from timeit import default_timer as timer
-import gc
 
 from Bio import motifs
 import pandas as pd
 import plotly
 import plotly.graph_objs as go
 import numpy as np
-import readline  # Often necessary for rpy2 to work properly.
-import rpy2.robjects as R
-from rpy2.robjects.packages import importr
+from pytfmpval import tfmp
 
 import utils
 
@@ -73,17 +62,26 @@ class Variant(object):
         self.iden = self.line_list[2]
         self.orig_line = line.strip()
         self.info_fields = self.line_list[7].split(";")
-        (self.common_samples, self.motif_fields, self.exp_fields, self.act_fields,
+        (self.common_var_samples, self.commons_samples, self.motif_fields, self.exp_fields, self.act_fields,
             self.genes) = self.parse_info_fields()
         self.motif_scores = self.get_motif_scores()  # Get var, ref, and diff motif scores and place into a dict.
-        self.sample_data = self.get_sample_data()  # Parse all combos of gene expression and loci activity data.
+        # Parse all combos of gene expression and loci data, determine if peaks are binary or quantitative.
+        self.var_sample_data, self.binary = self.get_var_sample_data()
 
         self.output = self.get_variant_summary()  # Get output lines as a list of lists.
+
+        if self.common_var_samples is not None:  # Should never evaluate to False.
+            self.num_com_var_samps = len(self.common_var_samples)
+        else:
+            self.num_com_var_samps = 0
 
         if self.common_samples is not None:  # Should never evaluate to False.
             self.num_com_samps = len(self.common_samples)
         else:
             self.num_com_samps = 0
+
+        self.var_recurrence_dec = self.num_com_var_samps / self.num_com_samps
+        self.var_recurrence_frac = str(self.num_com_var_samps) + "/" + str(self.num_com_samps)
 
     def parse_info_fields(self):
         """
@@ -105,9 +103,12 @@ class Variant(object):
             genes (list of str): List of INFO fields for variant that
                 contain MOTIF related information.
         """
+        act_var_samples = None
+        exp_var_samples = None
         act_samples = None
         exp_samples = None
 
+        common_var_samples = []
         common_samples = []
         motif_fields = []
         exp_fields = []
@@ -135,6 +136,8 @@ class Variant(object):
                 exp_fields.append(field)
                 # Get variant samples with expression data.
                 if name == "EXPV":
+                    exp_var_samples = data.split(",")
+                if name == "EXPV" or name == "EXPR":
                     exp_samples = data.split(",")
             elif name.startswith("GENE"):
                 genes = data.split(',')
@@ -142,11 +145,21 @@ class Variant(object):
                 act_fields.append(field)
                 # Get variant samples with locus activity data.
                 if name == "SAMPSV":
+                    act_var_samples = data.split(",")
+                if name == "SAMPSV" or name == "SAMPSR":
                     act_samples = data.split(",")
 
-        common_samples = compare_samples(exp_samples, act_samples)
+        if act_var_samples:
+            common_var_samples = compare_samples(exp_var_samples, act_var_samples)
+        else:
+            common_var_samples = exp_var_samples
 
-        return (common_samples, motif_fields, exp_fields, act_fields, genes)
+        if act_samples:
+            common_samples = compare_samples(act_samples, exp_samples)
+        else:
+            common_samples = exp_samples
+
+        return (common_var_samples, common_samples, motif_fields, exp_fields, act_fields, genes)
 
     def get_motif_scores(self):
         """
@@ -172,45 +185,59 @@ class Variant(object):
             elif x[0] == "MOTIFR":
                 ref_scores = x[1].split(",")
 
-        for i in names:
-            idx = names.index(i)
-            # Store scores for variant.
-            motifs[i] = [float(var_scores[idx]), float(ref_scores[idx]),
-                         float(var_scores[idx]) - float(ref_scores[idx])]
+        try:
+            for i in names:
+                idx = names.index(i)
+                # Store scores for variant.
+                motifs[i] = [float(var_scores[idx]), float(ref_scores[idx]),
+                             float(var_scores[idx]) - float(ref_scores[idx])]
+        except NameError:
+            print("Motif names not found in file. Motif analysis must be performed first. Exiting.")
+            sys.exit()
 
         return motifs
 
-    def get_sample_data(self):
+    def get_var_sample_data(self):
         """
-        Parses and returns the gene expression and loci activity z-scores
-        for variant samples.
+        Parses and returns the gene expression and loci activity scores for variant samples.
 
         Returns:
             sample_data (list of lists of str):
                 [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
                 [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
+            binary (boolean): True if loci peaks are binary, False if quantitative.
         """
 
-        samples = self.common_samples
+        samples = self.common_var_samples
         act_data = [x.split("=") for x in self.act_fields]
         exp_data = [x.split("=") for x in self.exp_fields]
         genes = self.genes
 
         sample_data = []
+        binary = False
 
-        for x in act_data:
-            # Get loci id.
-            if x[0] == "LOCIID":
-                loci = x[1].split(",")
-            # Get each set of z-scores for each loci.
-            elif x[0] == "LOCIVZ":
-                act_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+        if act_data:  # Handle if no activity data is used.
+            for x in act_data:
+                # Get loci id.
+                if x[0] == "LOCIID":
+                    loci = x[1].split(",")
+                # Get each set of z-scores for each loci.
+                elif x[0] == "LOCIVZ":
+                    act_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                # Get all variant samples that have the given peak if binary.
+                elif x[0] == "LOCIVPK":
+                    binary = True
+                    peak_samples = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
-        # Create dict for loci - {loci_id: [act_z_scores]}
-        loci_data = {k: v for k, v in zip(loci, act_z_scores)}
+            # Create dict for loci - {loci_id: [peak_samples]}
+            if binary:
+                loci_data = {k: v for k, v in zip(loci, peak_samples)}
+            # Or - {loci_id: [act_z_scores]}
+            else:
+                loci_data = {k: v for k, v in zip(loci, act_z_scores)}
 
         for x in exp_data:
-            # Get each set of z-scores for each gene.
+            # Get each set of z-scores or fold-changes for each gene.
             if x[0] == "EXPVZ":
                 gene_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
@@ -218,22 +245,30 @@ class Variant(object):
         gene_data = {k: v for k, v in zip(genes, gene_z_scores)}
 
         # Create list of lists containing all sets of relevant data combinations for all samples with a variant.
-        # [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
-        #  [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
-        for i in samples:  # First iterate through all samples and get their expression and activity indices.
-            e_idx = samples[i][0]
-            a_idx = samples[i][1]
+        # [[sample, loci1, sample act_data, gene1, sample exp_z_score],
+        #  [sample, loci1, sample act_data, gene2, sample exp_z_score]...]
+        if act_data:
+            for s in samples:  # First iterate through all samples and get their expression and activity indices.
+                e_idx = samples[s][0]
+                a_idx = samples[s][1]
 
-            for l in loci_data:  # Iterate through each locus for given sample.
-                # print(loci_data[l], str(a_idx), sep="\t")
-                samp_act_z = loci_data[l][a_idx]
+                for l in loci_data:  # Iterate through each locus for given sample.
+                    samp_act_data = loci_data[l][a_idx]
 
-                for g in gene_data:  # And now each gene for each locus.
-                    samp_exp_z = gene_data[g][e_idx]
+                    for g in gene_data:  # And now each gene for each locus.
+                        samp_exp_data = gene_data[g][e_idx]
 
-                    sample_data.append([i, l, samp_act_z, g, samp_exp_z])
+                        sample_data.append([s, l, samp_act_data, g, samp_exp_data])
+        else:  # Only return expression info if no activity data.
+            for s in samples:  # First iterate through all samples and get their expression and activity indices.
+                e_idx = samples[s][0]
 
-        return sample_data
+                for g in gene_data:  # Get each gene for sample.
+                    samp_exp_data = gene_data[g][e_idx]
+
+                    sample_data.append([s, g, samp_exp_data])
+
+        return (sample_data, binary)
 
     def get_variant_summary(self):
         """
@@ -246,28 +281,52 @@ class Variant(object):
         """
         var_info = [self.pos.chrom, self.pos.start, self.ref_allele, self.var_allele]
         motif_info = self.motif_scores
-        sample_info = self.sample_data
+        var_sample_info = self.var_sample_data
 
         output_fields = []
 
         for m in motif_info:
             m_score = motif_info[m]  # Motif delta score for var vs ref.
             var_score, ref_score, diff_score = (m_score[0], m_score[1], m_score[2])
-            for s in sample_info:
-                dist_metrics = [(float(diff_score)), float(s[2]), float(s[4])]  # To be used for plotting later.
-                dist_score = calc_distance(dist_metrics)
-                # Create complete list of output fields.
-                output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [s[0]] + [s[1]] +
-                                     [s[2]] + [s[3]] + [s[4]] + [dist_score])
+            for s in var_sample_info:
+                if len(s) == 5:
+                    sample = s[0]
+                    loci = s[1]
+                    loci_data = s[2]
+                    gene = s[3]
+                    exp_data = s[4]
 
-        return (output_fields)
+                    if self.binary is False:
+                        # To be used for plotting later.
+                        dist_metrics = [(float(diff_score)), float(loci_data), float(exp_data)]
+                        dist_score = calc_3d_dist(dist_metrics)
+                        # Create complete list of output fields.
+                        output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
+                                             [loci] + [loci_data] + [gene] + [exp_data] + [dist_score])
+                    else:  # TODO - How to determine "UNIQUE" and "UNIQUELY ABSENT" peaks?
+                        dist_metrics = [(float(diff_score)), float(exp_data)]  # To be used for plotting later.
+                        dist_score = calc_2d_dist(dist_metrics)
+                        # Create complete list of output fields.
+                        output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
+                                             [loci] + [get_peak_status(loci_data)] + [gene] + [exp_data] +
+                                             [dist_score])
+                if len(s) == 3:  # If no loci activity data present.
+                    sample = s[0]
+                    gene = s[1]
+                    exp_data = s[2]
+                    dist_metrics = [(float(diff_score)), float(s[2])]  # To be used for plotting later.
+                    dist_score = calc_2d_dist(dist_metrics)
+                    # Create complete list of output fields.
+                    output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
+                                         [gene] + [exp_data] + [dist_score])
+
+        return output_fields
 
 
 def compare_samples(exp_samples, act_samples):
     """
-    Compare gene expression and activity samples with variant and return common samples as a dict
-    of format {sample_name: (expression_index, activity_index)} so expression and activity
-    z-scores can be found appropriately.
+    Compare two lists of samples and return common samples as a dict of format
+    {sample_name: (list1_index, list2_index)} so data may be found appropriately.
 
     Args:
         exp_samples (list of str): List of variant samples with expression data.
@@ -290,15 +349,200 @@ def compare_samples(exp_samples, act_samples):
     return common_samps
 
 
-def calc_distance(score_array):
+def get_peak_status(peak):
     """
-    Return a distance for a motif log-odds ratios, activity z-score, and gene expression z-score.
+    Return "Present" for 1 or "Absent" for 0.
+    """
+
+    if peak == 0:
+        result = "ABSENT"
+    elif peak == 1:
+        result = "PRESENT"
+    else:
+        print("Binary peaks suspected, but 0 or 1 not present. Returning 'NA'.")
+        result = "NA"
+
+    return result
+
+
+def calc_3d_dist(score_array):
+    """
+    Return a distance for a motif log-likelihood ratios, activity score, and gene expression score.
     """
 
     return sqrt((score_array[0] ** 2) + (score_array[1] ** 2) + (score_array[2] ** 2))
 
 
-def plot_distances(df, out_prefix):
+def calc_2d_dist(score_array):
+    """
+    Return a distance for a motif log-odds ratios and gene expression z-score.
+    """
+
+    return sqrt((score_array[0] ** 2) + (score_array[1] ** 2))
+
+
+def check_peak_pres_binary(var_line):
+    """
+    Check if loci data is present and if it's binary or quantitative.
+
+    Returns:
+        present (boolean): True if loci peak data is present.
+        binary (boolean): True if binary (0/1) loci data. False if quantitative.
+    """
+    binary = False
+    present = False
+    if len(var_line) == 11:
+        loci_data = var_line[7]
+        present = True
+
+    if present:
+        if all(type(x) is int for x in loci_data):
+            binary = True
+
+    return (present, binary)
+
+
+def scale_and_frame(all_output):
+    """
+    Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
+    metric, summation, and taking square root. Make things much easier to plot and handle.
+
+    Args:
+        all_output (list of lists): Each list contains a set of motif, expression, activity data.
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
+             gene1, sample exp_z_score, distance]
+
+    Return:
+        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
+             gene1, sample exp_z_score, distance, scaled_distance]
+    """
+
+    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
+                                           'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
+                                           'EXP_ZSCORE', 'DISTANCE'])
+    df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
+        'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
+                                                       'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
+
+    # Get scaling factors.
+    motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
+    act_score_scale = max(df.ACT_ZSCORE ** 2)
+    gene_score_scale = max(df.EXP_ZSCORE ** 2)
+
+    # Scale the distance and create new column.
+    df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                    ((df.ACT_ZSCORE ** 2) / act_score_scale) +
+                                    ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+
+    # Sort by distance.
+    df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+
+    return df
+
+
+def get_pwms(motifs_file, background, pc=0.1):
+    """
+    Get PWMs for each motif in the motif_file.
+
+    Args:
+        motifs_file (str):
+            Path to file containing motifs in JASPAR format as count matrices.
+        pc (float):
+            Pseudocount value to add to each position.
+        background (list of float):
+            A, C, T, and G background frequencies.
+
+    Return:
+        pwms (dict):
+            {motif_name: pwm R matrix}
+    """
+    pwms = {}
+
+    # Parse motifs using Biopython.
+    fh = open(motifs_file)
+    for m in motifs.parse(fh, "jaspar"):
+        pfm = m.counts.normalize(pseudocounts=pc)    # Create frequency matrix.
+        pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
+        # Create matrix string from motif pwm.
+        mat = pwm[0] + pwm[1] + pwm[2] + pwm[3]
+        mat = [str(x) for x in mat]
+        mat = " ".join(mat)
+        pwms[m.name] = mat
+    fh.close()
+
+    return pwms
+
+
+def find_pval(matrices, m_score, r_bg):
+    """
+    Utilize pytfmpval to calculate the p-values for a score and motif given
+    the nucleotide background frequencies and PWM list.
+
+    Args:
+        matrices (dict of R matrix):
+            Dict of PWMs corresponding to each motif. {motif name: R PWM}
+        m_score (tuple):
+            Tuple of (score, motif).
+        r_bg (R FloatVector):
+            Vector containing background nucleotide frequencies [A, C, G, T]
+    """
+    score = m_score[0]
+    motif = m_score[1]
+    matrix = matrices[motif]
+
+    start = timer()
+    mat = tfmp.read_matrix(matrix, r_bg)  # Create the pytfmpval Matrix object.
+    pval = tfmp.score2pval(mat, score)  # Actually calculate p-value from score.
+
+    if pval[0] == 0:
+        pval[0] = 0.000000000000001  # So log can still be taken.
+    end = timer()
+
+    print(motif + ": " + str(end - start))
+
+    return float(pval[0])
+
+
+def get_pvals(df, bg, matrices, proc):
+    """
+    Utilize the pytfmpval package to calculate p-values for both the variant and reference scores for a given
+    variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
+
+    Args:
+        df (pandas DataFrame):
+            Dataframe containing the motif scores for the variant and reference samples.
+        bg (list of float):
+            A, C, T, and G background frequencies.
+        matrices (dict of R matrices):
+            {motif name: R pwm matrix}
+        proc (int):
+            Processor cores to be used.
+
+    Return:
+        df (pandas DataFrame):
+            Updated DataFrame with p-values.
+    """
+
+    ref_scores = [x for x in zip(df.REF_SCORE, df.MOTIF)]
+    var_scores = [x for x in zip(df.VAR_SCORE, df.MOTIF)]
+
+    with ThreadPool(proc) as pool:
+        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(matrices), var_scores,
+                                                itertools.repeat(bg)))
+    with ThreadPool(proc) as pool:
+        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(matrices), ref_scores,
+                                                itertools.repeat(bg)))
+
+    # Insert columns for p-values.
+    df.insert(6, 'VAR_PVAL', var_pvals)
+    df.insert(8, 'REF_PVAL', ref_pvals)
+    df[['VAR_PVAL', 'REF_PVAL']] = df[['VAR_PVAL', 'REF_PVAL']].apply(pd.to_numeric)
+
+    return df
+
+
+def plot_3d_dist(df, out_prefix):
     """
     Plot distance scores calculated for the delta var/ref motif log-odds ratios,
     activity z-score, and gene expression z-score sets for each variant.
@@ -309,7 +553,7 @@ def plot_distances(df, out_prefix):
         out_prefix (str) = Prefix to use for plot outputs.
     """
 
-    # Take top 30k hits only, plotly handle really handle more for 3D plots.
+    # Take top 30k hits only, plotly can't really handle more for 3D plots.
     if len(df) > 30000:
         df = df.head(30000)
 
@@ -379,159 +623,162 @@ def plot_distances(df, out_prefix):
     )
 
 
-def scale_and_frame(all_output):
+def plot_2d_vol(df, out_prefix):
     """
-    Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
-    metric, summation, and taking square root. Make things much easier to plot and handle.
+    Create volcano plot for samples compared to a control group.
+
+    X-axis is gene expression fold-change as compared to control group. Variants in the
+    control group are obviously ignored and excluded from output.
 
     Args:
-        all_output (list of lists): Each list contains a set of motif, expression, activity data.
-            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
-             gene1, sample exp_z_score, distance]
-
-    Return:
-        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
-            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
-             gene1, sample exp_z_score, distance, scaled_distance]
+        df (pandas Dataframe) = Dataframe containing all variant, distance
+            metric, and sample info. One record per row.
+        out_prefix (str) = Prefix to use for plot outputs.
     """
 
-    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
-                                           'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
-                                           'EXP_ZSCORE', 'DISTANCE'])
-    df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
-        'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
-                                                       'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
+    # Take top 30k hits only, plotly can't really handle more for 3D plots.
+    if len(df) > 30000:
+        df = df.head(30000)
 
-    # Get scaling factors.
-    motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
-    act_score_scale = max(df.ACT_ZSCORE ** 2)
-    gene_score_scale = max(df.EXP_ZSCORE ** 2)
+    info = list(zip(df.SAMPLE, df.MOTIF, df.GENE))
+    info_list = ["Sample: " + x[0] + ", Motif: " + x[1] + ", Gene: " + x[2] for x in info]
 
-    # Scale the distance and create new column.
-    df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
-                                    ((df.ACT_ZSCORE ** 2) / act_score_scale) +
-                                    ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+    trace1 = go.Scatter(
+        name="Distances",
+        x=df['VAR-REF_SCORE'],
+        y=-log10(df.VAR_PVAL),
+        z=df.EXP_ZSCORE,
+        hoverinfo="x+y+text",
+        text=info_list,
+        mode='markers',
+        marker=dict(
+            size=4,                 # Using gene expression as color scale values for now.
+            color=df.GROUP,                # set color to an array/list of desired values
+            colorscale=[[0, 'rgb(188, 191, 196)'], [0.5, 'rgb(188, 191, 196)'], [1, 'rgb(170, 1, 15)']],   # colorscale
+            colorbar=dict(
+                title='Scaled Distance'
+            ),
+            opacity=0.8
+        )
+    )
 
-    # Sort by distance.
-    df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+    data = [trace1]
+    layout = go.Layout(
+        margin=dict(
+            l=0,
+            r=0,
+            b=0,
+            t=100
+        ),
+        title='Volcano Plot for Individual Variant Events',
+        scene=dict(
+            xaxis=dict(
+                title='Variant Motif p-value',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+            yaxis=dict(
+                title='Gene Expression Fold-Change',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+        )
+    )
 
-    return df
+    fig = go.Figure(data=data, layout=layout)
+    plotly.offline.plot(
+        fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix
+    )
 
 
-def get_pwms(motifs_file, background, pc=0.1):
+def plot_2d_cor(df, out_prefix):
     """
-    Get PWMs for each motif in the motif_file.
+    Create volcano plot for samples compared to a control group.
+
+    X-axis is gene expression fold-change as compared to control group. Variants in the
+    control group are obviously ignored and excluded from output.
 
     Args:
-        motifs_file (str):
-            Path to file containing motifs in JASPAR format as count matrices.
-        pc (float):
-            Pseudocount value to add to each position.
-        background (list of float):
-            A, C, T, and G background frequencies.
-
-    Return:
-        pwms (dict):
-            {motif_name: pwm R matrix}
+        df (pandas Dataframe) = Dataframe containing all variant, distance
+            metric, and sample info. One record per row.
+        out_prefix (str) = Prefix to use for plot outputs.
     """
-    pwms = {}
 
-    # Parse motifs using Biopython.
-    fh = open(motifs_file)
-    for m in motifs.parse(fh, "jaspar"):
-        pfm = m.counts.normalize(pseudocounts=pc)    # Create frequency matrix.
-        pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
-        name = m.name
-        # Create R matrix from motif pwm.
-        mat = R.r.matrix(R.FloatVector(pwm[0] + pwm[1] + pwm[2] + pwm[3]),
-                         nrow=4)
-        pwms[name] = mat
-    fh.close()
+    # Take top 30k hits only, plotly can't really handle more for 3D plots.
+    if len(df) > 30000:
+        df = df.head(30000)
 
-    return pwms
+    info = list(zip(df.SAMPLE, df.MOTIF, df.GENE))
+    info_list = ["Sample: " + x[0] + ", Motif: " + x[1] + ", Gene: " + x[2] for x in info]
 
+    trace1 = go.Scattergl(
+        name="Distances",
+        x=df.EXP_LOG2_FC,
+        y=-log10(df.VAR_PVAL),
+        z=df.EXP_ZSCORE,
+        hoverinfo="x+y+text",
+        text=info_list,
+        mode='markers',
+        marker=dict(
+            size=4,                 # Using gene expression as color scale values for now.
+            color=df.SCALED_DISTANCE,                # set color to an array/list of desired values
+            colorscale=[[0, 'rgb(188, 191, 196)'], [0.5, 'rgb(188, 191, 196)'], [1, 'rgb(170, 1, 15)']],   # colorscale
+            colorbar=dict(
+                title='Scaled Distance'
+            ),
+            opacity=0.8
+        )
+    )
 
-def find_pval(r_func, matrices, m_score, r_bg):
-    """
-    Utilize the given R function to calculate the p-values for a score and motif given
-    the nucleotide background frequencies and PWM list.
+    data = [trace1]
+    layout = go.Layout(
+        margin=dict(
+            l=0,
+            r=0,
+            b=0,
+            t=100
+        ),
+        title='Volcano Plot for Individual Variant Events',
+        scene=dict(
+            xaxis=dict(
+                title='Var/Ref Motif Log-Likelihood Ratio Difference',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+            yaxis=dict(
+                title='Enhancer Activity z-Score',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            ),
+            zaxis=dict(
+                title='Gene Expression z-Score',
+                titlefont=dict(
+                    family='Courier New, monospace',
+                    size=18,
+                    color='#7f7f7f'
+                )
+            )
+        )
+    )
 
-    Args:
-        r_func (R function):
-            The R function that will be used to actually calculate the threshold using a matrix,
-            p-value, and background nucleotide frequencies.
-        matrices (dict of R matrix):
-            Dict of PWMs corresponding to each motif. {motif name: R PWM}
-        m_score (tuple):
-            Tuple of (score, motif).
-        r_bg (R FloatVector):
-            Vector containing background nucleotide frequencies [A, C, G, T]
-    """
-    score = m_score[0]
-    motif = m_score[1]
-    matrix = matrices[motif]
-
-    start = timer()
-    pval = r_func(matrix, score, r_bg)  # Actually calls the TFMPvalue function to calculate the p-value.
-    if pval[0] == 0:
-        pval[0] = 0.000000000000001  # So log can still be taken.
-    end = timer()
-
-    print(motif + ": " + str(end - start))
-
-    # Attempt to free memory by running R and python garbage collectors. This was an issue, not sure this resolves it.
-    R.r("gc()")
-    gc.collect()
-
-    return float(pval[0])
-
-
-def get_pvals(df, bg, matrices, proc):
-    """
-    Utilize the TFMPvalue R package to calculate p-values for both the variant and reference scores for a given
-    variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
-
-    Args:
-        df (pandas DataFrame):
-            Dataframe containing the motif scores for the variant and reference samples.
-        bg (list of float):
-            A, C, T, and G background frequencies.
-        matrices (dict of R matrices):
-            {motif name: R pwm matrix}
-        proc (int):
-            Processor cores to be used.
-
-    Return:
-        df (pandas DataFrame):
-            Updated DataFrame with p-values.
-    """
-    r_background = R.FloatVector((bg[0], bg[1], bg[2], bg[3]))
-    # Define R function to use.
-    calc_pval = R.r('''
-        function(mat, score, bg) {
-            options(digits=20)
-            rownames(mat, do.NULL = TRUE, prefix = "row")
-            rownames(mat) <- c("A","C","G","T")
-            names(bg) <- c("A","C","G","T")
-            TFMsc2pv(mat, score, bg, type="PWM")
-        }
-        ''')
-    ref_scores = [x for x in zip(df.REF_SCORE, df.MOTIF)]
-    var_scores = [x for x in zip(df.VAR_SCORE, df.MOTIF)]
-
-    with ThreadPool(proc) as pool:
-        var_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), var_scores,
-                                                itertools.repeat(r_background)))
-    with ThreadPool(proc) as pool:
-        ref_pvals = pool.starmap(find_pval, zip(itertools.repeat(calc_pval), itertools.repeat(matrices), ref_scores,
-                                                itertools.repeat(r_background)))
-
-    # Insert columns for p-values.
-    df.insert(6, 'VAR_PVAL', var_pvals)
-    df.insert(8, 'REF_PVAL', ref_pvals)
-    df[['VAR_PVAL', 'REF_PVAL']] = df[['VAR_PVAL', 'REF_PVAL']].apply(pd.to_numeric)
-
-    return df
+    fig = go.Figure(data=data, layout=layout)
+    plotly.offline.plot(
+        fig, filename=out_prefix + '.html',
+        auto_open=False, image="png", image_filename=out_prefix
+    )
 
 
 def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
@@ -586,6 +833,9 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
             for x in full_var_output:
                 all_output.append(x)
 
+        # Check if loci data is present and if it's binary.
+        present, binary = check_peak_pres_binary(all_output[0])
+
         # Scale distance metrics.
         print("Calculating distance metrics.")
         scaled_df = scale_and_frame(all_output)
@@ -603,23 +853,20 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
         if d_thresh != 0:
             restricted_scaled_df = scaled_df[scaled_df.SCALED_DISTANCE > d_thresh]
             restricted_scaled_df.to_csv(rest_out_file, sep="\t", index=False)
-            plot_distances(restricted_scaled_df, out_prefix + "_restricted")
+            plot_3d_dist(restricted_scaled_df, out_prefix + "_restricted")
 
         # Get top 100 hits by distance.
         top100_df = scaled_df.head(100)
         top100_df.to_csv(top_out_file, sep="\t", index=False)
 
         # Plotting - only plots top 30k hits as browsers can't handle more.
-        plot_distances(scaled_df, out_prefix + "_full")
-        plot_distances(top100_df, out_prefix + "_top")
+        plot_3d_dist(scaled_df, out_prefix + "_full")
+        plot_3d_dist(top100_df, out_prefix + "_top")
 
     print("Complete at: " + utils.timeString() + ".")
 
 
 if __name__ == '__main__':
-    # Check if TFMPvalues package is installed, attempt to install if necessary.
-    utils.check_r_install('TFMPvalue')
-    TFMPvalues = importr('TFMPvalue')
 
     parser = argparse.ArgumentParser(usage=__doc__)
     parser.add_argument("-i", "--input", dest="inp_file", required=True)
@@ -635,7 +882,7 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--processors", dest="processors", required=False, default=1, type=int)
     args = parser.parse_args()
 
-    if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1:
+    if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1.0:
         bp = [args.a_freq, args.c_freq, args.g_freq, args.t_freq]
     else:
         print("Background frequencies must equal 1. Check input parameters, exiting.")

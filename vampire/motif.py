@@ -1303,6 +1303,7 @@ def get_motifs(motif_filename, pc, default_th, base_pr, force_unique=True):
     added_count = 0        # count of motifs added
 
     # Open and import motif file: note: with always closes open file
+    # TODO - Change this so it doesn't assume an empty line between motifs.
     with open(motif_filename) as file_handle:
 
         # JASPAR motif file has >name \n A [ tab delineated weight array ] \n

@@ -32,20 +32,22 @@ from Bio import motifs
 
 from motif import get_put_motifs
 from utils import timeString
-from memory_profiler import profile
+# from memory_profiler import profile
+# import pdb
 
 
-@profile
+# @profile
 def find_thresh(combo):
     """
     Calculate the detection thresholds for each pwm matrix given the nucleotide
     background frequencies and desired p-value.
 
     Args:
-        matrix (tuple): The PWM for which a detection threshold will be found.
-            (motif name, rows of matrix concatenated to single string with spaces between positions).
-        pval (float): P-value to which threshold will be calculated.
-        bg (list of floats): List containing background nucleotide frequencies [A, C, G, T]
+        combo (tuple): Three element tuple as defined below.
+            matrix (tuple): The PWM for which a detection threshold will be found.
+                (motif name, rows of matrix concatenated to single string with spaces between positions).
+            pval (float): P-value to which threshold will be calculated.
+            bg (list of floats): List containing background nucleotide frequencies [A, C, G, T]
     """
 
     matrix, pval, bg = (combo[0], combo[1], combo[2])
@@ -53,6 +55,7 @@ def find_thresh(combo):
     start = timer()
     mat = tfmp.read_matrix(matrix[1], bg=bg, mat_type="pwm")
     thresh = tfmp.pval2score(mat, pval)
+    # pdb.set_trace()
     del mat
     end = timer()
 
@@ -73,7 +76,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
         pfm = m.counts.normalize(pseudocounts=pc)    # Create frequency matrix.
         pwm = pfm.log_odds(background)              # Calculate to log likelihoods vs background.
 
-        # Create R matrix from motif pwm.
+        # Create matrix string from motif pwm.
         mat = pwm[0] + pwm[1] + pwm[2] + pwm[3]
         mat = [str(x) for x in mat]
         mat = " ".join(mat)
@@ -84,6 +87,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
     # Multiprocessing to use multiple processing cores.
     print(("Calculating thresholds (" + timeString() + "). This should only take a few minutes."))
     thresholds = []
+
     with ThreadPool(p) as pool:
         for x in pool.imap_unordered(find_thresh, zip(matrices, itertools.repeat(pv),
                                                       itertools.repeat(bp)), chunksize=8):
@@ -114,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument("-ow", "--overwrite", action="store_true", required=False)
     args = parser.parse_args()
 
-    if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1:
+    if sum([args.a_freq, args.c_freq, args.g_freq, args.t_freq]) == 1.0:
         bp = [args.a_freq, args.c_freq, args.g_freq, args.t_freq]
     else:
         print("Background frequencies must equal 1. Check input parameters, exiting.")

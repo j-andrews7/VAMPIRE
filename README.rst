@@ -11,7 +11,6 @@ There are a number of potential uses for VENUSAR, such as:
    -  Corroborating these differences with gene expression.
    -  Creation of predicted gene regulatory networks.
 
--  Decomposition of SNV motif frequency with respect to their surrounding sequence to identify mutational signatures that may be attributed to specific generating processes.
 
 These tasks can be done on an individual basis or as a pipeline.
 

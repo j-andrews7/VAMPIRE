@@ -18,6 +18,8 @@ Args:
 
     -pc (optional) <0.1>: Pseudocounts value to be added to all positions of
         the motif frequency matrix before calculating the probability matrix.
+    -pr (int, optional) <1>: Number of processing cores to utilize. Will
+        decrease running time linearly.
     -th (optional) <0>: Motifs are considered a match if they score above a
         given threshold. This is the default threshold (used if no threshold is
         specified by motif file).
@@ -543,6 +545,12 @@ def print_peak(peak, fileHandle, filter_bed):
 
     return
 
+
+def process_variant():
+    """
+    
+    """
+
 """
     ---- START OF MAIN ----
     Requires that vcf file have variants sorted by position within chromosomes
@@ -552,10 +560,9 @@ def print_peak(peak, fileHandle, filter_bed):
 def main(file_input, file_output, file_reference_genome, file_motif, file_baseline_prob,
          pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
          file_chip, file_output_chip, filter_co, sorted_lex,
-         filter_chip, filter_motif, filter_novel):
+         filter_chip, filter_motif, filter_novel, procs):
     """
     Args:
-        Unless specified as required, use None to not use.
 
         file_input (-i, required): Name of sorted variant file (*.vcf) to process.
         file_output (-o, required): Name of output file (*.vcf) to be created.
@@ -566,6 +573,11 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
             corresponding to a position (JASPAR format). File may or may not
             have thresholds identified in the transcription factor (TF) name line.
             Grammar Note: motif and transcription factor are used interchangeably.
+
+        #
+        # -- Args that affect performance. -- #
+        #
+        procs (int, optional): Number of processing cores to use
 
         #
         # -- arguments that change scoring of TF against variants in vcf -- #
@@ -593,7 +605,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
             to match FASTA reference. None or False does not.
 
         #
-        # -- chip specific arguments -- #
+        # -- ChIP specific arguments -- #
         #
         file_chip (-ci): Name of a sorted bed-like file (*.bed) containing
             tab delineated columns of the form:  chr start end TF1;TF2;TF3...
@@ -624,9 +636,6 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
             if they do match a ChIP peak. Only print potentially novel variants
             Can not also be called with filter_chip
             Translated to options.filter_vcf_no
-
-    Returns:
-        output is via files defined in arguments
     """
 
     print("Run started at:" + timeString())
@@ -856,7 +865,7 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
             info += "\n##INFO=<ID=MOTIFC,Number=.,Type=Character,Description="
             info += "\"Motif validated by ChIP (Y/N)\">"
 
-        print("\tfinished header read " + timeString())
+        print("\tFinished header read " + timeString())
 
         # Skip info lines
         while line.startswith("##"):
@@ -986,14 +995,11 @@ def main(file_input, file_output, file_reference_genome, file_motif, file_baseli
                 " mms:"+str(len(pmms)))
         print()"""
 
-        # Co-binding transcription factors currently not implemented
-        #cb_dict = None    # QQQ: does what? Why was it here originally?
-
-        # Create the correct line in VCF format and print to file_output
+        # Create the correct line in VCF format and print to file_output.
         update_vcf(var_element.vcf_line, matches, fileHan_output, options)
         sys.stdout.flush()
 
-        # Print remaining peaks
+        # Print remaining peaks.
         for peak in peak_buffer:
             print_peak(peak, fileHan_out_chip, filter_bed)
 
@@ -1011,33 +1017,27 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage=__doc__)
 
     # Create arguments and options
-    parser.add_argument("-i", "--input", dest="input_file", required=True)
-    parser.add_argument("-r", "--ref", dest="file_reference", required=True)
-    parser.add_argument("-m", "--motif", dest="file_motif", required=True)
-    parser.add_argument("-o", "--output", dest="output_file", required=True)
-    parser.add_argument("-ci", "--chip", dest="chip_file",
-                        required=False, default=None)
-    parser.add_argument("-co", "--chipout", dest="chip_out_file",
-                        required=False, default=None)
-    parser.add_argument("-bp", "--baseline", dest="baseline_file",
-                        required=False, default=None)
-    parser.add_argument("-th", "--threshold", dest="threshold",
-                        required=False, default=0.0)
-    parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts",
-                        required=False, default=0.1)
-    parser.add_argument("-ws", "--wing_size", dest="wing_size",
-                        required=False, default=50)
+    parser.add_argument("-i", "--input", dest="input_file", required=True, type=str)
+    parser.add_argument("-r", "--ref", dest="file_reference", required=True, type=str)
+    parser.add_argument("-m", "--motif", dest="file_motif", required=True, type=str)
+    parser.add_argument("-o", "--output", dest="output_file", required=True, type=str)
+    parser.add_argument("-ci", "--chip", dest="chip_file", required=False, default=None, type=str)
+    parser.add_argument("-pr", "--processors", dest="procs", required=False, default=1, type=int)
+    parser.add_argument("-co", "--chipout", dest="chip_out_file", required=False, default=None, type=str)
+    parser.add_argument("-bp", "--baseline", dest="baseline_file", required=False, default=None, type=str)
+    parser.add_argument("-th", "--threshold", dest="threshold", required=False, default=0.0, type=float)
+    parser.add_argument("-pc", "--pseudocounts", dest="pseudocounts", required=False, default=0.1, type=float)
+    parser.add_argument("-ws", "--wing_size", dest="wing_size", required=False, default=50, type=int)
     parser.add_argument("-fm", "--filter_motif", action="count", required=False)
     parser.add_argument("-fc", "--filter_chip", action="count", required=False)
     parser.add_argument("-fn", "--filter_novel", action="count", required=False)
     parser.add_argument("-fp", "--filter_co", action="count", required=False)
     parser.add_argument("-sk", "--kary_sort", action="count", required=False)
-    parser.add_argument("-mv", "--multi_variant", dest="multi_var",
-                        required=False)    # use -1 and correct to wing_size below
-    parser.add_argument("-rf", "--force_ref_match", action="count",
-                        required=False)
-    parser.add_argument("-ht", "--homotypic_run", action="count",
-                        required=False)
+
+    # use -1 and correct to wing_size below
+    parser.add_argument("-mv", "--multi_variant", dest="multi_var", required=False)
+    parser.add_argument("-rf", "--force_ref_match", action="count", required=False)
+    parser.add_argument("-ht", "--homotypic_run", action="count", required=False)
 
     args = parser.parse_args()
 
@@ -1050,9 +1050,10 @@ if __name__ == '__main__':
     file_baseline_prob = args.baseline_file    # defaults to None
     file_chip = args.chip_file
     file_output_chip = args.chip_out_file
-    pc = float(args.pseudocounts)
-    ws = int(args.wing_size)
-    th = float(args.threshold)
+    pr = args.procs
+    pc = args.pseudocounts
+    ws = args.wing_size
+    th = args.threshold
     run_homotypic = args.homotypic_run
     force_ref_match = args.force_ref_match
 
@@ -1072,5 +1073,5 @@ if __name__ == '__main__':
     main(file_input, file_output, file_reference_genome, file_motif, file_baseline_prob,
          pc, th, ws, multivar_distance, run_homotypic, force_ref_match,
          file_chip, file_output_chip, filter_co, sorted_lex,
-         filter_chip, filter_motif, filter_novel
+         filter_chip, filter_motif, filter_novel, pr
          )
