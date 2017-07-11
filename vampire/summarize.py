@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
 For a VAMPIRE'd VCF file, calculate a distance score for each motif delta score,
-ChIP z-score, and gene expression z-score set for each variant. These values
-will be plotted in 3 dimensional space. Additionally, simple bed-like files
-are provided as output. One contains the scores for all motif, ChIP z-score, and
-gene expression z-score sets for all variants. An optional second contains only
+(optional) loci score, and gene expression score set for each variant. These values
+will be plotted in 2 or 3 dimensional space. Additionally, simple bed-like files
+are provided as output. One contains the scores for all motif, loci score, and
+gene expression score sets for all variants. An optional second contains only
 those sets that meet the distance score threshold as defined by the user.
-A third will report the sets for the top 100 distance scores.
+A third will report the sets for the top 100 scaled-distance scores.
 
 Usage: summarize.py -i <input.vcf> -o <output> [OPTIONS]
 
 Args:
     -i (str): Path to sorted variant file to process.
     -o (str): Prefix for output files.
-    -d (float, optional): Scaled distance magnitude threshold that must be met for variants/genes to be reported to output.
-        Default is 0, so all set distances will be reported. Magnitude of 0.7 usually yields results pretty different from
-        the norm.
+    -d (float, optional): Scaled distance magnitude threshold that must be met for variants/genes to be reported to
+        output. Default is 0, so all set distances will be reported. A magnitude of 0.7 usually yields results pretty
+        different from the norm for 3 dimensional data.
     -m (str): Path to motif file with counts.
     -a (float, optional) <0.25>: Background probability for A nucleotides. If not provided then all are assumed to
         be equally likely (all are 0.25).
@@ -239,14 +239,16 @@ class Variant(object):
         for x in exp_data:
             # Get each set of z-scores or fold-changes for each gene.
             if x[0] == "EXPVZ":
-                gene_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                gene_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+            elif x[0] == "EXPVFC":
+                gene_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
-        # Create dict for genes - {gene: [gene_z_scores]}
-        gene_data = {k: v for k, v in zip(genes, gene_z_scores)}
+        # Create dict for genes - {gene: [gene_scores]}
+        gene_data = {k: v for k, v in zip(genes, gene_scores)}
 
         # Create list of lists containing all sets of relevant data combinations for all samples with a variant.
-        # [[sample, loci1, sample act_data, gene1, sample exp_z_score],
-        #  [sample, loci1, sample act_data, gene2, sample exp_z_score]...]
+        # [[sample, loci1, sample act_data, gene1, sample exp_score],
+        #  [sample, loci1, sample act_data, gene2, sample exp_score]...]
         if act_data:
             for s in samples:  # First iterate through all samples and get their expression and activity indices.
                 e_idx = samples[s][0]
@@ -302,14 +304,15 @@ class Variant(object):
                         dist_score = calc_3d_dist(dist_metrics)
                         # Create complete list of output fields.
                         output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
-                                             [loci] + [loci_data] + [gene] + [exp_data] + [dist_score])
+                                             [loci] + [loci_data] + [gene] + [exp_data] + [dist_score] +
+                                             [self.var_recurrence_frac] + [self.var_recurrence_dec])
                     else:  # TODO - How to determine "UNIQUE" and "UNIQUELY ABSENT" peaks?
                         dist_metrics = [(float(diff_score)), float(exp_data)]  # To be used for plotting later.
                         dist_score = calc_2d_dist(dist_metrics)
                         # Create complete list of output fields.
                         output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
                                              [loci] + [get_peak_status(loci_data)] + [gene] + [exp_data] +
-                                             [dist_score])
+                                             [dist_score] + [self.var_recurrence_frac] + [self.var_recurrence_dec])
                 if len(s) == 3:  # If no loci activity data present.
                     sample = s[0]
                     gene = s[1]
@@ -318,7 +321,8 @@ class Variant(object):
                     dist_score = calc_2d_dist(dist_metrics)
                     # Create complete list of output fields.
                     output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
-                                         [gene] + [exp_data] + [dist_score])
+                                         [gene] + [exp_data] + [dist_score] + [self.var_recurrence_frac] +
+                                         [self.var_recurrence_dec])
 
         return output_fields
 
@@ -402,41 +406,109 @@ def check_peak_pres_binary(var_line):
     return (present, binary)
 
 
-def scale_and_frame(all_output):
+def get_df_header(variant):
+    """
+    Use a Variant object to determine what the column headings of the dataframe should be. Adjusts header based on
+    info fields found in variant record.
+
+    Args:
+        variant (Variant): Variant object to use to determine df column headers.
+
+    Returns:
+        header (list of string): List of column headers to be used by dataframe.
+    """
+    # These will always be present.
+    header = ['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE', 'VAR-REF_SCORE', 'SAMPLE']
+
+    act_fields = variant.act_fields
+    exp_fields = variant.exp_fields
+
+    if variant.act_fields:
+        header.append("LOCIID")
+        for field in act_fields:
+            name = field.split('=')[0]
+            if name == "LOCIVZ":
+                header.append("LOCI_ZSCORE")
+                break
+            elif name == "LOCIVPK":
+                header.append("PEAK")
+                break
+            elif name == "LOCIVFC":
+                header.append("LOCI_LOG2_FC")
+                break
+    else:
+        header.append("GENE")
+        for field in exp_fields:
+            name = field.split('=')[0]
+            if name == "EXPVZ":
+                header.append("LOCI_ZSCORE")
+                break
+            elif name == "LOCIVPK":
+                header.append("PEAK")
+                break
+            elif name == "LOCIVFC":
+                header.append("LOCI_LOG2_FC")
+                break
+
+    return header
+
+
+def scale_and_frame(all_output, present, binary):
     """
     Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
-    metric, summation, and taking square root. Make things much easier to plot and handle.
+    metric, summation, and taking square root. Make things much easier to plot and handle. If loci data is presented
+    and/or binary, will adjust the dataframe as appropriate.
 
     Args:
         all_output (list of lists): Each list contains a set of motif, expression, activity data.
-            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
-             gene1, sample exp_z_score, distance]
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_score,
+             gene1, sample exp_score, distance]
 
     Return:
         df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
-            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_z_score,
-             gene1, sample exp_z_score, distance, scaled_distance]
+            [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_score,
+             gene1, sample exp_score, distance, scaled_distance]
     """
 
-    df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
-                                           'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
-                                           'EXP_ZSCORE', 'DISTANCE'])
-    df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
-        'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
-                                                       'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
+    if present and not binary:
+        df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
+                                               'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
+                                               'EXP_ZSCORE', 'DISTANCE', 'RECURRENCE', '%RECURRENCE'])
+        df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
+            'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
+                                                           'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
 
-    # Get scaling factors.
-    motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
-    act_score_scale = max(df.ACT_ZSCORE ** 2)
-    gene_score_scale = max(df.EXP_ZSCORE ** 2)
+        # Get scaling factors.
+        motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
+        act_score_scale = max(df.ACT_ZSCORE ** 2)
+        gene_score_scale = max(df.EXP_ZSCORE ** 2)
 
-    # Scale the distance and create new column.
-    df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
-                                    ((df.ACT_ZSCORE ** 2) / act_score_scale) +
-                                    ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+        # Scale the distance and create new column.
+        df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                        ((df.ACT_ZSCORE ** 2) / act_score_scale) +
+                                        ((df.EXP_ZSCORE ** 2) / gene_score_scale))
 
-    # Sort by distance.
-    df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+        # Sort by distance.
+        df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+
+    if present and binary:
+        df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
+                                               'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'PEAK', 'GENE',
+                                               'EXP_ZSCORE', 'DISTANCE'])
+        df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
+            'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
+                                             'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
+
+        # Get scaling factors.
+        motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
+        gene_score_scale = max(df.EXP_ZSCORE ** 2)
+
+        # Scale the distance and create new column.
+        df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                        ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+
+        # Sort by distance.
+        df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
 
     return df
 
