@@ -8,7 +8,7 @@ does NOT contain a class because does NOT currently create a VCF object
 
 intended to be imported and used by other code in vampire package
 """
-
+from __future__ import absolute_import, division, print_function, unicode_literals
 import sequence
 import pandas as pd
 

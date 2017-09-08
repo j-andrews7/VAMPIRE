@@ -4,7 +4,7 @@ utils.py contains generic object classes and other related functions.
 
 Intended to be imported to reduce code redundancy and streamline code maintenance.
 """
-
+from __future__ import absolute_import, division, print_function, unicode_literals
 import time
 import sys
 

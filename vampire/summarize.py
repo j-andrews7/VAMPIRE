@@ -26,6 +26,7 @@ Args:
         calculating the probability matrix.
     -p (int, optional) <1>: Processor cores to utilize. Will decrease computation time linearly.
 """
+from __future__ import absolute_import, division, print_function, unicode_literals
 import argparse
 import sys
 import time
@@ -45,7 +46,7 @@ from pytfmpval import tfmp
 import utils
 
 # YYY-JA 04/24/2017 - Hate making yet another variant (Ha) of this class.
-# Move to utils.py and make uniform across modules.
+# TODO - Move to utils.py and make uniform across modules.
 
 
 class Variant(object):
@@ -65,8 +66,9 @@ class Variant(object):
         (self.common_var_samples, self.commons_samples, self.motif_fields, self.exp_fields, self.act_fields,
             self.genes) = self.parse_info_fields()
         self.motif_scores = self.get_motif_scores()  # Get var, ref, and diff motif scores and place into a dict.
-        # Parse all combos of gene expression and loci data, determine if peaks are binary or quantitative.
-        self.var_sample_data, self.binary = self.get_var_sample_data()
+        # Parse all combos of gene and loci data, determine if peaks are binary, z-scores, log2 fold-change, or absent.
+        # Determine if expression data is z-score or log2 fold-change.
+        self.var_sample_data, self.loci_data_type, self.exp_data_type = self.get_var_sample_data()
 
         self.output = self.get_variant_summary()  # Get output lines as a list of lists.
 
@@ -200,12 +202,16 @@ class Variant(object):
     def get_var_sample_data(self):
         """
         Parses and returns the gene expression and loci activity scores for variant samples.
+        Also determines what type of data each score is.
 
         Returns:
             sample_data (list of lists of str):
                 [[sample, loci1, sample act_z_score, gene1, sample exp_z_score],
                 [sample, loci1, sample act_z_score, gene2, sample exp_z_score]...]
-            binary (boolean): True if loci peaks are binary, False if quantitative.
+            loci_type (str): Type of loci data for variant. None, "Z", "binary", or "FC".
+                Robust Z-scores or log2 fold-change, respectively.
+            exp_type (str): Type of expression data for variant. "Z" or "FC".
+                Robust Z-scores or log2 fold-change, respectively.
         """
 
         samples = self.common_var_samples
@@ -214,7 +220,8 @@ class Variant(object):
         genes = self.genes
 
         sample_data = []
-        binary = False
+        loci_type = None
+        exp_type = "Z"
 
         if act_data:  # Handle if no activity data is used.
             for x in act_data:
@@ -223,25 +230,26 @@ class Variant(object):
                     loci = x[1].split(",")
                 # Get each set of z-scores for each loci.
                 elif x[0] == "LOCIVZ":
-                    act_z_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                    loci_type = "Z"
+                    act_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
                 # Get all variant samples that have the given peak if binary.
                 elif x[0] == "LOCIVPK":
-                    binary = True
-                    peak_samples = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                    loci_type = "binary"
+                    act_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                elif x[0] == "LOCIVFC":
+                    loci_type = "FC"
+                    act_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
 
-            # Create dict for loci - {loci_id: [peak_samples]}
-            if binary:
-                loci_data = {k: v for k, v in zip(loci, peak_samples)}
-            # Or - {loci_id: [act_z_scores]}
-            else:
-                loci_data = {k: v for k, v in zip(loci, act_z_scores)}
+            loci_data = {k: v for k, v in zip(loci, act_scores)}
 
         for x in exp_data:
             # Get each set of z-scores or fold-changes for each gene.
             if x[0] == "EXPVZ":
                 gene_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                exp_type = "Z"
             elif x[0] == "EXPVFC":
                 gene_scores = [x.strip("(").strip(")").split(',') for x in x[1].split("),(")]
+                exp_type = "FC"
 
         # Create dict for genes - {gene: [gene_scores]}
         gene_data = {k: v for k, v in zip(genes, gene_scores)}
@@ -270,7 +278,7 @@ class Variant(object):
 
                     sample_data.append([s, g, samp_exp_data])
 
-        return (sample_data, binary)
+        return (sample_data, loci_type, exp_type)
 
     def get_variant_summary(self):
         """
@@ -291,14 +299,14 @@ class Variant(object):
             m_score = motif_info[m]  # Motif delta score for var vs ref.
             var_score, ref_score, diff_score = (m_score[0], m_score[1], m_score[2])
             for s in var_sample_info:
-                if len(s) == 5:
+                if self.loci_data_type is not None:
                     sample = s[0]
                     loci = s[1]
                     loci_data = s[2]
                     gene = s[3]
                     exp_data = s[4]
 
-                    if self.binary is False:
+                    if self.loci_data_type != "binary":
                         # To be used for plotting later.
                         dist_metrics = [(float(diff_score)), float(loci_data), float(exp_data)]
                         dist_score = calc_3d_dist(dist_metrics)
@@ -313,7 +321,7 @@ class Variant(object):
                         output_fields.append(var_info + [m] + [var_score] + [ref_score] + [diff_score] + [sample] +
                                              [loci] + [get_peak_status(loci_data)] + [gene] + [exp_data] +
                                              [dist_score] + [self.var_recurrence_frac] + [self.var_recurrence_dec])
-                if len(s) == 3:  # If no loci activity data present.
+                else:  # If no loci activity data present.
                     sample = s[0]
                     gene = s[1]
                     exp_data = s[2]
@@ -385,75 +393,7 @@ def calc_2d_dist(score_array):
     return sqrt((score_array[0] ** 2) + (score_array[1] ** 2))
 
 
-def check_peak_pres_binary(var_line):
-    """
-    Check if loci data is present and if it's binary or quantitative.
-
-    Returns:
-        present (boolean): True if loci peak data is present.
-        binary (boolean): True if binary (0/1) loci data. False if quantitative.
-    """
-    binary = False
-    present = False
-    if len(var_line) == 11:
-        loci_data = var_line[7]
-        present = True
-
-    if present:
-        if all(type(x) is int for x in loci_data):
-            binary = True
-
-    return (present, binary)
-
-
-def get_df_header(variant):
-    """
-    Use a Variant object to determine what the column headings of the dataframe should be. Adjusts header based on
-    info fields found in variant record.
-
-    Args:
-        variant (Variant): Variant object to use to determine df column headers.
-
-    Returns:
-        header (list of string): List of column headers to be used by dataframe.
-    """
-    # These will always be present.
-    header = ['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE', 'VAR-REF_SCORE', 'SAMPLE']
-
-    act_fields = variant.act_fields
-    exp_fields = variant.exp_fields
-
-    if variant.act_fields:
-        header.append("LOCIID")
-        for field in act_fields:
-            name = field.split('=')[0]
-            if name == "LOCIVZ":
-                header.append("LOCI_ZSCORE")
-                break
-            elif name == "LOCIVPK":
-                header.append("PEAK")
-                break
-            elif name == "LOCIVFC":
-                header.append("LOCI_LOG2_FC")
-                break
-    else:
-        header.append("GENE")
-        for field in exp_fields:
-            name = field.split('=')[0]
-            if name == "EXPVZ":
-                header.append("LOCI_ZSCORE")
-                break
-            elif name == "LOCIVPK":
-                header.append("PEAK")
-                break
-            elif name == "LOCIVFC":
-                header.append("LOCI_LOG2_FC")
-                break
-
-    return header
-
-
-def scale_and_frame(all_output, present, binary):
+def scale_and_frame(all_output, loci_type, exp_type):
     """
     Return dataframe after adding scaled distance score to each row. Scaling done by dividing with max value of each
     metric, summation, and taking square root. Make things much easier to plot and handle. If loci data is presented
@@ -463,52 +403,121 @@ def scale_and_frame(all_output, present, binary):
         all_output (list of lists): Each list contains a set of motif, expression, activity data.
             [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_score,
              gene1, sample exp_score, distance]
+        loci_type (string or None): Type of loci data - None, "Z", "FC", or "binary".
+        exp_type (string): Type of expression data - "Z" or "FC".
 
     Return:
-        df (pandas Dataframe): Each row contains a set of motif, expression, activity data.
+        df (pandas Dataframe): Each row contains a set of motif, gene expression, locus data.
             [chr, pos, ref, alt, motif, var score, ref score, diff score, sample, loci1, sample act_score,
              gene1, sample exp_score, distance, scaled_distance]
     """
 
-    if present and not binary:
-        df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
-                                               'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'ACT_ZSCORE', 'GENE',
-                                               'EXP_ZSCORE', 'DISTANCE', 'RECURRENCE', '%RECURRENCE'])
-        df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
-            'ACT_ZSCORE', 'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE', 'ACT_ZSCORE',
-                                                           'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
+    # These will always be present.
+    header = ['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE', 'VAR-REF_SCORE', 'SAMPLE']
 
-        # Get scaling factors.
-        motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
-        act_score_scale = max(df.ACT_ZSCORE ** 2)
-        gene_score_scale = max(df.EXP_ZSCORE ** 2)
+    if loci_type is None:
+        header.append("GENE")
+        if exp_type == "Z":
+            header.append("EXP_ZSCORE")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_ZSCORE']] = df[['EXP_ZSCORE']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_ZSCORE ** 2)
+        elif exp_type == "FC":
+            header.append("EXP_LOG2_FC")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_LOG2_FC']] = df[['EXP_LOG2_FC']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_LOG2_FC ** 2)
+        loci_score_scale = None
+    if loci_type == "Z":
+        header.extend(["LOCUS_ID", "LOCUS_ZSCORE"])
+        header.append("GENE")
+        if exp_type == "Z":
+            header.append("EXP_ZSCORE")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_ZSCORE', 'LOCUS_ZSCORE']] = df[['EXP_ZSCORE', 'LOCUS_ZSCORE']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_ZSCORE ** 2)
+        elif exp_type == "FC":
+            header.append("EXP_LOG2_FC")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_LOG2_FC', 'LOCUS_ZSCORE']] = df[['EXP_LOG2_FC', 'LOCUS_ZSCORE']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_LOG2_FC ** 2)
+        loci_score_scale = max(df.LOCUS_ZSCORE ** 2)
+    elif loci_type == "FC":
+        header.extend(["LOCUS_ID", "LOCUS_LOG2_FC"])
+        header.append("GENE")
+        if exp_type == "Z":
+            header.append("EXP_ZSCORE")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_ZSCORE', 'LOCUS_LOG2_FC']] = df[['EXP_ZSCORE', 'LOCUS_LOG2_FC']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_ZSCORE ** 2)
+        elif exp_type == "FC":
+            header.append("EXP_LOG2_FC")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_LOG2_FC', 'LOCUS_LOG2_FC']] = df[['EXP_LOG2_FC', 'LOCUS_LOG2_FC']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_LOG2_FC ** 2)
+        loci_score_scale = max(df.LOCUS_LOG2_FC ** 2)
+    elif loci_type == "binary":
+        header.extend(["LOCUS_ID", "PEAK"])
+        header.append("GENE")
+        if exp_type == "Z":
+            header.append("EXP_ZSCORE")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_ZSCORE']] = df[['EXP_ZSCORE']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_ZSCORE ** 2)
+        elif exp_type == "FC":
+            header.append("EXP_LOG2_FC")
+            header.extend(["DISTANCE", "RECURRENCE", "%RECURRENCE"])
+            df = pd.DataFrame(all_output, columns=header)
+            df[['EXP_LOG2_FC']] = df[['EXP_LOG2_FC']].apply(pd.to_numeric)
+            exp_score_scale = max(df.EXP_LOG2_FC ** 2)
+        loci_score_scale = None
 
-        # Scale the distance and create new column.
-        df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
-                                        ((df.ACT_ZSCORE ** 2) / act_score_scale) +
-                                        ((df.EXP_ZSCORE ** 2) / gene_score_scale))
+    motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
 
-        # Sort by distance.
-        df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+    # Scale the distance and create new column.
+    if loci_score_scale is not None:
+        if loci_score_scale == "Z":
+            if exp_score_scale == "Z":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.LOCUS_ZSCORE ** 2) / loci_score_scale) +
+                                                ((df.EXP_ZSCORE ** 2) / exp_score_scale))
+            elif exp_score_scale == "FC":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.LOCUS_ZSCORE ** 2) / loci_score_scale) +
+                                                ((df.EXP_LOG2_FC ** 2) / exp_score_scale))
+        elif loci_score_scale == "FC":
+            if exp_score_scale == "Z":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.LOCUS_LOG2_FC ** 2) / loci_score_scale) +
+                                                ((df.EXP_ZSCORE ** 2) / exp_score_scale))
+            elif exp_score_scale == "FC":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.LOCUS_LOG2_FC ** 2) / loci_score_scale) +
+                                                ((df.EXP_LOG2_FC ** 2) / exp_score_scale))
+        else:
+            if exp_score_scale == "Z":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.EXP_ZSCORE ** 2) / exp_score_scale))
+            elif exp_score_scale == "FC":
+                df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                                ((df.EXP_LOG2_FC ** 2) / exp_score_scale))
+    else:
+        if exp_score_scale == "Z":
+            df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                            ((df.EXP_ZSCORE ** 2) / exp_score_scale))
+        elif exp_score_scale == "FC":
+            df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
+                                            ((df.EXP_LOG2_FC ** 2) / exp_score_scale))
 
-    if present and binary:
-        df = pd.DataFrame(all_output, columns=['CHR', 'POS', 'REF', 'ALT', 'MOTIF', 'VAR_SCORE', 'REF_SCORE',
-                                               'VAR-REF_SCORE', 'SAMPLE', 'LOCIID', 'PEAK', 'GENE',
-                                               'EXP_ZSCORE', 'DISTANCE'])
-        df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
-            'EXP_ZSCORE', 'DISTANCE']] = df[['VAR-REF_SCORE', 'VAR_SCORE', 'REF_SCORE',
-                                             'EXP_ZSCORE', 'DISTANCE']].apply(pd.to_numeric)
-
-        # Get scaling factors.
-        motif_score_scale = max(df['VAR-REF_SCORE'] ** 2)
-        gene_score_scale = max(df.EXP_ZSCORE ** 2)
-
-        # Scale the distance and create new column.
-        df['SCALED_DISTANCE'] = np.sqrt(((df['VAR-REF_SCORE'] ** 2) / motif_score_scale) +
-                                        ((df.EXP_ZSCORE ** 2) / gene_score_scale))
-
-        # Sort by distance.
-        df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
+    # Sort by distance.
+    df.sort_values('SCALED_DISTANCE', ascending=False, inplace=True)
 
     return df
 
@@ -546,7 +555,7 @@ def get_pwms(motifs_file, background, pc=0.1):
     return pwms
 
 
-def find_pval(matrices, m_score, r_bg):
+def find_pval(matrices, m_score, bg):
     """
     Utilize pytfmpval to calculate the p-values for a score and motif given
     the nucleotide background frequencies and PWM list.
@@ -556,30 +565,30 @@ def find_pval(matrices, m_score, r_bg):
             Dict of PWMs corresponding to each motif. {motif name: R PWM}
         m_score (tuple):
             Tuple of (score, motif).
-        r_bg (R FloatVector):
-            Vector containing background nucleotide frequencies [A, C, G, T]
+        bg (list of float):
+            List containing background nucleotide frequencies [A, C, G, T]
     """
     score = m_score[0]
     motif = m_score[1]
     matrix = matrices[motif]
 
     start = timer()
-    mat = tfmp.read_matrix(matrix, r_bg)  # Create the pytfmpval Matrix object.
+    mat = tfmp.read_matrix(matrix, bg)  # Create the pytfmpval Matrix object.
     pval = tfmp.score2pval(mat, score)  # Actually calculate p-value from score.
 
-    if pval[0] == 0:
-        pval[0] = 0.000000000000001  # So log can still be taken.
+    if pval == 0:
+        pval = 0.000000000000001  # So log can still be taken.
     end = timer()
 
     print(motif + ": " + str(end - start))
 
-    return float(pval[0])
+    return pval
 
 
 def get_pvals(df, bg, matrices, proc):
     """
     Utilize the pytfmpval package to calculate p-values for both the variant and reference scores for a given
-    variant and motif. Add them to the DataFrame as additional columns. Also add the log2 fold-change between them.
+    variant and motif. Add them to the DataFrame as additional columns.
 
     Args:
         df (pandas DataFrame):
@@ -614,7 +623,7 @@ def get_pvals(df, bg, matrices, proc):
     return df
 
 
-def plot_3d_dist(df, out_prefix):
+def plot_3d_dist(df, out_prefix, loci_type, exp_type):
     """
     Plot distance scores calculated for the delta var/ref motif log-odds ratios,
     activity z-score, and gene expression z-score sets for each variant.
@@ -623,20 +632,38 @@ def plot_3d_dist(df, out_prefix):
         df (pandas Dataframe) = Dataframe containing all variant, distance
             metric, and sample info. One record per row.
         out_prefix (str) = Prefix to use for plot outputs.
+        loci_type (str) = Type of locus data so column is retrieved from dataframe properly.
+        exp_type (str) = Type of expression data so column is retrieved from dataframe properly.
     """
 
     # Take top 30k hits only, plotly can't really handle more for 3D plots.
     if len(df) > 30000:
         df = df.head(30000)
 
-    info = list(zip(df.SAMPLE, df.MOTIF, df.GENE))
-    info_list = ["Sample: " + x[0] + ", Motif: " + x[1] + ", Gene: " + x[2] for x in info]
+    info = list(zip(df.SAMPLE, df.MOTIF, df.GENE, df.LOCUS_ID))
+    info_list = ["Sample: " + x[0] + ", Motif: " + x[1] + ", Gene: " + x[2] + ", Locus: " + x[3] for x in info]
+
+    # Determine locus data type.
+    if loci_type == "Z":
+        y = df.LOCUS_ZSCORE
+        y_label = "Locus Robust Z-Score"
+    elif loci_type == "FC":
+        y = df.LOCUS_LOG2_FC
+        y_label = "Locus Log2 Fold-Change"
+
+    # Determine expression data type.
+    if exp_type = "Z":
+        z = df.EXP_ZSCORE
+        z_label = "Gene Expression Robust Z-Score"
+    elif exp_type = "FC":
+        z = df.EXP_LOG2_FC
+        z_label = "Gene Expression Log2 Fold-Change"
 
     trace1 = go.Scatter3d(
         name="Distances",
         x=df['VAR-REF_SCORE'],
-        y=df.ACT_ZSCORE,
-        z=df.EXP_ZSCORE,
+        y=y,
+        z=z,
         hoverinfo="x+y+z+text",
         text=info_list,
         mode='markers',
@@ -670,7 +697,7 @@ def plot_3d_dist(df, out_prefix):
                 )
             ),
             yaxis=dict(
-                title='Enhancer Activity z-Score',
+                title=y_label,
                 titlefont=dict(
                     family='Courier New, monospace',
                     size=18,
@@ -678,7 +705,7 @@ def plot_3d_dist(df, out_prefix):
                 )
             ),
             zaxis=dict(
-                title='Gene Expression z-Score',
+                title=z_label,
                 titlefont=dict(
                     family='Courier New, monospace',
                     size=18,
@@ -878,6 +905,9 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
 
         line = f.readline().strip()
         now = time.strftime("%c")
+        loci_type = None
+        exp_type = "Z"
+        first = True
 
         command = ('##venusar=<ID=summary,Date="' + now + '",CommandLineOptions="--input ' + vcf_file +
                    ' --output ' + out_prefix + ' --dthresh ' + str(d_thresh) + ' --motif ' + motif_file + '">')
@@ -902,18 +932,21 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
             # Piece out full hits, restricted hits, top hits for everything.
             full_var_output = current_var.output
 
+            # Check data types and get column headers for data frame.
+            if first:
+                first = False
+                loci_type = current_var.loci_data_type
+                exp_type = current_var.exp_data_type
+
             for x in full_var_output:
                 all_output.append(x)
 
-        # Check if loci data is present and if it's binary.
-        present, binary = check_peak_pres_binary(all_output[0])
-
         # Scale distance metrics.
         print("Calculating distance metrics.")
-        scaled_df = scale_and_frame(all_output)
+        scaled_df = scale_and_frame(all_output, loci_type, exp_type)
 
         # Get p-values if motif file provided.
-        if motif_file:
+        if motif_file is not None:
             print("Calculating p-values. This may take some time.")
             bio_background = {'A': background[0], 'C': background[1], 'G': background[2], 'T': background[3]}
             pwms = get_pwms(motif_file, bio_background, pc)
@@ -921,6 +954,9 @@ def main(vcf_file, out_prefix, d_thresh, motif_file, background, pc, proc):
 
         print("Creating output files and plots.")
         scaled_df.to_csv(full_out_file, sep="\t", index=False)
+
+        if loci_type == "Z" or loci_type == "FC":
+            plot_3d_dist(scaled_df, out_prefix + "_full")
 
         if d_thresh != 0:
             restricted_scaled_df = scaled_df[scaled_df.SCALED_DISTANCE > d_thresh]

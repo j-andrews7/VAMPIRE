@@ -53,7 +53,7 @@ Args:
         to match FASTA reference
 """
 
-from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
+from __future__ import absolute_import, division, print_function, unicode_literals
 import sys
 import argparse
 import motif

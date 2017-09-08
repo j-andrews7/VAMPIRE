@@ -1,28 +1,29 @@
 #!/usr/bin/env python
 """
-Input type 1: (-i, -o): For a given motif annotated vcf file (already run through motifs.py)
-Input type 2: (-i, -m, -mo): For a given vcf file (used for samples), filter the motif file
-
 With motifs from either input type and a gene expression file (-e), process the motif set to
 remove all motif matches for TFs that are not expressed in at least one sample above the
 specified threshold.
 
+Input type 1: (-i, -o): To filter TFs from a VCF file withs motifs already annotated.
+Input type 2: (-i, -m, -mo): To filter motifs from a motif file using samples in the VCF file.
+
 Usage: tf_expression.py -i <input.vcf> -e <expression.bed> -o <output.vcf> [OPTIONS]
 
 Args:
-    -i (required) <input.vcf>: Name of sorted variant file to process.
+    -i (required) <input.vcf>: Name of variant file to process.
     -o (optional) <output.vcf>: Name of output file to be created.
-        Not created if using -m and -mo
-    -e (required) <expression.bed>: An expression 'bed' file.
-    -m (optional) <motif.txt>: Tab-delimited key file containing a frequency
-        matrix with each row corresponding to a base and each column
+        Not created if using -m and -mo.
+    -e (required) <expression.bed>: An expression 'bed' file with a header and formart of:
+        CHR  START  STOP  GENE  <sample 1>  <sample 2>  ...  <sample n>
+    -m (optional) <motif.txt>: Tab-delimited key file containing a count, frequency, or
+        position-weight matrix with each row corresponding to a base and each column
         corresponding to a position (JASPAR format).
         If specified ignores output.vcf.
     -mo (optional) <motif_output.txt>: Name of output motif file to be created.
-        If blank and -m then creates .tf_filtered version of motif.txt file
+        If blank and -m then creates .tf_filtered version of motif.txt file.
     -th (optional) <5>: TFs are considered expressed if they are above this threshold.
 """
-from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import sys
 import argparse
@@ -109,7 +110,7 @@ def process_line(line, gene_dict, thresh):
             for samples in vcf as values.
         thresh (float): Expression threshold that TFs must meet to be included in output.
     Returns:
-        modified version of input line
+        new_line (str): Modified version of input line.
     """
     line = line.strip()
     line_list = line.split("\t")

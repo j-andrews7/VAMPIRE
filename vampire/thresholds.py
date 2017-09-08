@@ -20,7 +20,7 @@ Args:
     -ow (flag, optional): OverWrite: If present, thresholds already present in the input file will be
         replaced in the output file.
 """
-
+from __future__ import absolute_import, division, print_function, unicode_literals
 import sys
 import argparse
 from multiprocessing.dummy import Pool as ThreadPool
@@ -90,7 +90,7 @@ def main(motif_file, motif_outfile, pc, bp, ow, pv, p):
 
     with ThreadPool(p) as pool:
         for x in pool.imap_unordered(find_thresh, zip(matrices, itertools.repeat(pv),
-                                                      itertools.repeat(bp)), chunksize=8):
+                                                      itertools.repeat(bp)), chunksize=16):
             thresholds.append(x)
 
     print(("Total motifs read: " + str(len(thresholds))))

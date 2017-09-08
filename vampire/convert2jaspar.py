@@ -202,7 +202,7 @@ def main(input_file, output_file, m_type):
     elif m_type == "ENCODE":
         print("Converting from ENCODE to JASPAR format.")
         convert_encode(input_file, output_file)
-    elif m_type == "HOME":
+    elif m_type == "HOMER":
         print("Converting from HOMER to JASPAR format.")
         convert_homer(input_file, output_file)
     else:  # Should never be the case.

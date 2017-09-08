@@ -29,8 +29,7 @@ Args:
         if 1 (default): only runs if prior vcf comparison results in no overlap
         if 2: runs no matter what
 """
-
-from __future__ import print_function    # so Ninja IDE will stop complaining & show symbols
+from __future__ import absolute_import, division, print_function, unicode_literals
 import argparse
 import time
 from statistics import median
@@ -625,4 +624,4 @@ if __name__ == '__main__':
     drop_act_ = args.drop_activity_
 
     main(inp_file, act_file, vcf_out, bed_out, th, filter_bed_num, include_bed,
-        include_vcf, drop_act_)
+         include_vcf, drop_act_)
